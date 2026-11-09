@@ -46,17 +46,18 @@ const todayStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-const fmtDate = (s) => (s ? `<span class="num">${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}</span>` : '');
-const plainDate = (s) => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}`;
+const fmtDate = (s) => (s ? `<span class="num">${plainDate(s)}</span>` : '');
+const plainDate = (s) => (YMD_FIRST.has(lang) ? `${s.slice(0, 4)}/${s.slice(5, 7)}/${s.slice(8, 10)}` : `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}`);
+const axisDate = (d) => (YMD_FIRST.has(lang) ? `${d.slice(2, 4)}/${d.slice(5, 7)}/${d.slice(8, 10)}` : `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}`);
 function timeAgo(iso) {
   if (!iso) return '';
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (min < 2) return 'הרגע';
-  if (min < 60) return `לפני ${min} דקות`;
+  if (min < 2) return tr('הרגע');
+  if (min < 60) return tr('לפני {n} דקות', { n: min });
   const h = Math.round(min / 60);
-  if (h < 24) return h === 1 ? 'לפני שעה' : `לפני ${h} שעות`;
+  if (h < 24) return h === 1 ? tr('לפני שעה') : tr('לפני {n} שעות', { n: h });
   const d = Math.round(h / 24);
-  return d === 1 ? 'אתמול' : `לפני ${d} ימים`;
+  return d === 1 ? tr('אתמול') : tr('לפני {n} ימים', { n: d });
 }
 function toast(msg) {
   const t = $('toast');
@@ -87,7 +88,7 @@ function mutate(fn) {
         if (r.ok) return result;
         if (r.status !== 409) throw new Error(`HTTP ${r.status}`);
       }
-      throw new Error('הנתונים עודכנו במקביל מחלון אחר, נסה שוב');
+      throw new Error(tr('הנתונים עודכנו במקביל מחלון אחר, נסה שוב'));
     } finally {
       if (pid !== current.id) await loadState(current.id);
     }
@@ -112,7 +113,7 @@ async function loadFx() {
   const lines = (await r.text()).trim().split(/\r?\n/);
   const head = lines[0].split(',');
   const iDate = head.indexOf('TIME_PERIOD'), iVal = head.indexOf('OBS_VALUE');
-  if (iDate < 0 || iVal < 0) throw new Error('תבנית שערים לא מוכרת');
+  if (iDate < 0 || iVal < 0) throw new Error(tr('תבנית שערים לא מוכרת'));
   const rows = lines.slice(1).map((l) => l.split(','))
     .map((c) => [c[iDate], Number(c[iVal])])
     .filter(([d, v]) => /^\d{4}-\d{2}-\d{2}$/.test(d) && v > 0)
@@ -190,9 +191,9 @@ function syncEntryFor(norm, p) {
 
 function applyFullSync(payload, stamp, fetchedAt) {
   if (payload.collection?.id !== current.collectionId) {
-    throw new Error(`הסנכרון לא הגיע מהתיק ${current.name}`);
+    throw new Error(tr('הסנכרון לא הגיע מהתיק {name}', { name: current.name }));
   }
-  if (!Array.isArray(payload.products)) throw new Error('הסנכרון ריק');
+  if (!Array.isArray(payload.products)) throw new Error(tr('הסנכרון ריק'));
   const date = todayStr();
   const isoNow = fetchedAt || new Date().toISOString();
   const isFirst = !state.meta.lastFull;
@@ -207,7 +208,7 @@ function applyFullSync(payload, stamp, fetchedAt) {
   const count = payload.products.reduce((s, p) => s + Number(p.quantity), 0);
   const expected = payload.totals ? ['cards', 'sealed', 'graded'].reduce((s, k) => s + Number(payload.totals[k] || 0), 0) : count;
   state.meta.warning = (count !== expected || (usdTotal > 0 && Math.abs(sum - usdTotal) > 1))
-    ? `הסנכרון האחרון לא תואם לגמרי את Collectr: ${count} פריטים מול ${expected}, ‎$${nf2.format(sum)} מול ‎$${nf2.format(usdTotal)}.`
+    ? { k: 'הסנכרון האחרון לא תואם לגמרי את Collectr: {count} פריטים מול {expected}, {sum} מול {total}.', p: { count, expected, sum: `‎${money('$', sum, 2)}`, total: `‎${money('$', usdTotal, 2)}` } }
     : null;
   state.snapshots[date] = { usd: portfolioUsd(), qty: count, lines: payload.products.length, source: 'full' };
   state.meta.lastFull = isoNow;
@@ -225,7 +226,7 @@ function parseCollectrPage(html) {
   let s = '', m;
   while ((m = re.exec(html))) s += JSON.parse(m[1]);
   const at = s.indexOf('"pages":[{"user"');
-  if (at < 0) throw new Error('נתוני התיק לא נמצאו בדף');
+  if (at < 0) throw new Error(tr('נתוני התיק לא נמצאו בדף'));
   const start = s.indexOf('[', at);
   let depth = 0, inStr = false, end = -1;
   for (let i = start; i < s.length; i++) {
@@ -237,7 +238,7 @@ function parseCollectrPage(html) {
     else if (c === '[' || c === '{') depth++;
     else if (c === ']' || c === '}') { depth--; if (depth === 0) { end = i; break; } }
   }
-  if (end < 0) throw new Error('נתוני התיק חתוכים');
+  if (end < 0) throw new Error(tr('נתוני התיק חתוכים'));
   return JSON.parse(s.slice(start, end + 1))[0];
 }
 
@@ -252,7 +253,7 @@ async function quickCheck() {
   const data = await fetchProfilePage(current.handle);
   const main = (data.collections || []).find((c) => c.default);
   if (!(data.collections || []).some((c) => c.id === current.collectionId)) {
-    throw new Error(`התיק ${current.collectionName} כבר לא מופיע בפרופיל`);
+    throw new Error(tr('התיק {name} כבר לא מופיע בפרופיל', { name: current.collectionName }));
   }
   if (main?.id !== current.collectionId) { ui.quickUnsupported = true; return null; }
   return mutate(() => applyQuickCheck(data));
@@ -316,10 +317,10 @@ async function checkForSync() {
       if ($('syncDialog').open) $('syncDialog').close();
       render();
       if (!res) continue; // Another window already applied this sync.
-      toast(res.isFirst ? `נטענו ${res.lines} מוצרים לתיק ${current.name}` : `סנכרון הושלם: ${res.lines} מוצרים${res.added ? `, ${res.added} חדשים` : ''}`);
+      toast(res.isFirst ? tr('נטענו {n} מוצרים לתיק {name}', { n: res.lines, name: current.name }) : `${tr('סנכרון הושלם: {n} מוצרים', { n: res.lines })}${res.added ? tr(', {n} חדשים', { n: res.added }) : ''}`);
     }
   } catch (e) {
-    state.meta.warning = `סנכרון נכשל: ${e.message}`;
+    state.meta.warning = { k: 'סנכרון נכשל: {msg}', p: { msg: e.message } };
     render();
   } finally {
     ui.syncInFlight = false;
@@ -379,9 +380,9 @@ function checkEbayRow(row, it) {
   const d = /Sold\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/.exec(row.text || '');
   if (d && EBAY_MONTHS[d[1].toUpperCase()]) out.date = `${d[3]}-${EBAY_MONTHS[d[1].toUpperCase()]}-${d[2].padStart(2, '0')}`;
 
-  if (!m) return fail('המחיר אינו סכום אחד בדולרים');
-  if (!out.date) return fail('אין תאריך מכירה');
-  if (/buy it now|best offer/i.test(row.text || '')) return fail('לא מכירה פומבית');
+  if (!m) return fail(tr('המחיר אינו סכום אחד בדולרים'));
+  if (!out.date) return fail(tr('אין תאריך מכירה'));
+  if (/buy it now|best offer/i.test(row.text || '')) return fail(tr('לא מכירה פומבית'));
   const problem = titleProblem(title, it);
   if (problem) return fail(problem);
   out.ok = true;
@@ -394,33 +395,33 @@ function titleProblem(title, it, { skipGrade = false } = {}) {
   if (!skipGrade) {
     const value = g.value.replace('.', '\\.');
     const grade = new RegExp(`(^|[^A-Z0-9])${g.company}[ .:#-]*((GEM|MINT|MT|NM)[ .-]*)*${value}(?!\\d|\\.\\d)`);
-    if (!grade.test(t)) return `הדירוג בכותרת אינו ${g.company} ${g.value}`;
+    if (!grade.test(t)) return tr('הדירוג בכותרת אינו {grade}', { grade: `${g.company} ${g.value}` });
   }
-  if (/\b(LOT|LOTS|BUNDLE|PROXY|CUSTOM|REPLICA|FAKE|COPY|STICKER|PICK|CHOOSE)\b/.test(t)) return 'חבילה או פריט לא מקורי';
-  if (/\b(PRISTINE|PERFECT|BLACK LABEL)\b/.test(t)) return 'דירוג מיוחד';
+  if (/\b(LOT|LOTS|BUNDLE|PROXY|CUSTOM|REPLICA|FAKE|COPY|STICKER|PICK|CHOOSE)\b/.test(t)) return tr('חבילה או פריט לא מקורי');
+  if (/\b(PRISTINE|PERFECT|BLACK LABEL)\b/.test(t)) return tr('דירוג מיוחד');
   // Reverse holos of the same card number sell for very different prices.
   const isReverseItem = /reverse/i.test(it.subType || '');
   const isReverseTitle = /\bREVERSE\b|\bREV HOLO\b/.test(t);
-  if (isReverseTitle && !isReverseItem) return 'גרסת Reverse Holo';
-  if (isReverseItem && !isReverseTitle) return 'לא גרסת Reverse Holo';
+  if (isReverseTitle && !isReverseItem) return tr('גרסת Reverse Holo');
+  if (isReverseItem && !isReverseTitle) return tr('לא גרסת Reverse Holo');
   // Collectr records each card's version, so a sale of another version doesn't count.
   const nonHoloTitle = /\bNON[ -]?HOLO\b/.test(t);
-  if (/holofoil/i.test(it.subType || '') && nonHoloTitle) return 'גרסה שאינה Holo';
-  if (/normal/i.test(it.subType || '') && /^(common|uncommon|rare)$/i.test(it.rarity || '') && /\bHOLO\b/.test(t) && !nonHoloTitle) return 'גרסת Holo';
+  if (/holofoil/i.test(it.subType || '') && nonHoloTitle) return tr('גרסה שאינה Holo');
+  if (/normal/i.test(it.subType || '') && /^(common|uncommon|rare)$/i.test(it.rarity || '') && /\bHOLO\b/.test(t) && !nonHoloTitle) return tr('גרסת Holo');
   // Stamped and special-foil printings are separate, differently priced cards.
   if (/\b(PRERELEASE|PRE RELEASE|STAFF|COSMOS|ROCKS AMERICA|STAMPED|STAMP)\b/.test(t)
-    && !/prerelease|staff|cosmos|rocks america|stamp/i.test(`${it.name} ${it.set} ${it.subType}`)) return 'גרסה מיוחדת של הקלף';
-  if (!isJapaneseItem(it) && /\b(JAPANESE|JAPAN|JPN|JP|KOREAN|CHINESE)\b/.test(t)) return 'שפה אחרת';
+    && !/prerelease|staff|cosmos|rocks america|stamp/i.test(`${it.name} ${it.set} ${it.subType}`)) return tr('גרסה מיוחדת של הקלף');
+  if (!isJapaneseItem(it) && /\b(JAPANESE|JAPAN|JPN|JP|KOREAN|CHINESE)\b/.test(t)) return tr('שפה אחרת');
   const words = normTitle(it.name.replace(/\(.*?\)/g, ' ')).replace(/[/.]/g, ' ').split(' ')
     .filter((w) => w.length > 1 && !['EX', 'GX', 'VMAX', 'VSTAR', 'MEGA', 'LV'].includes(w));
   const padded = ` ${t.replace(/[/.]/g, ' ')} `;
-  if (!words.every((w) => padded.includes(` ${w} `))) return 'שם הקלף שונה';
+  if (!words.every((w) => padded.includes(` ${w} `))) return tr('שם הקלף שונה');
   const left = String(it.number || '').split('/')[0].toUpperCase();
   if (left) {
     const pattern = /^\d+$/.test(left) ? `0*${Number(left)}` : left;
-    if (!new RegExp(`(^|[^A-Z0-9])${pattern}($|[^A-Z0-9])`).test(t)) return 'מספר הקלף שונה';
+    if (!new RegExp(`(^|[^A-Z0-9])${pattern}($|[^A-Z0-9])`).test(t)) return tr('מספר הקלף שונה');
   }
-  if (needsSetName(it) && !padded.includes(' CELEBRATIONS ')) return 'חסר שם הסט Celebrations';
+  if (needsSetName(it) && !padded.includes(' CELEBRATIONS ')) return tr('חסר שם הסט Celebrations');
   return '';
 }
 const average = (values) => values.reduce((s, v) => s + v, 0) / values.length;
@@ -438,7 +439,7 @@ function evaluateEbay(rows, it) {
 function applyEbayPrice(key, result, query) {
   const date = todayStr();
   const it = state.items[key];
-  if (!it) throw new Error('הקלף לא נמצא');
+  if (!it) throw new Error(tr('הקלף לא נמצא'));
   if (it.collectrPrice === undefined) it.collectrPrice = it.price;
   it.ebay = {
     value: result.value,
@@ -490,7 +491,7 @@ const compsErrorText = (e) => ({
   unauthorized: 'CompSniper לא קיבל את המפתח. בדוק אותו במסך מחירי המדורגים.',
   quota_exceeded: 'המכסה החודשית של CompSniper נגמרה. שאר הקלפים יתעדכנו אחרי האיפוס, בלי עלות.',
   local_cap: 'הגעת לתקרת הבקשות החודשית שהוגדרה באפליקציה. העדכון יימשך בחודש הבא.',
-}[e.code] || `עדכון המדורגים נעצר: ${e.message}`);
+}[e.code] || { k: 'עדכון המדורגים נעצר: {msg}', p: { msg: e.message } });
 
 function ebayApiSale(i, it) {
   const title = String(i.title || '');
@@ -498,9 +499,9 @@ function ebayApiSale(i, it) {
   const fail = (reason) => { out.reason = reason; return out; };
   out.price = Number(i.soldPrice);
   out.date = String(i.endedAt || '').slice(0, 10);
-  if (i.buyingFormat !== 'auction' || i.bestOfferAccepted) return fail('לא מכירה פומבית');
-  if (i.soldCurrency !== 'USD' || !(out.price > 0)) return fail('המחיר אינו בדולרים');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(out.date)) return fail('אין תאריך מכירה');
+  if (i.buyingFormat !== 'auction' || i.bestOfferAccepted) return fail(tr('לא מכירה פומבית'));
+  if (i.soldCurrency !== 'USD' || !(out.price > 0)) return fail(tr('המחיר אינו בדולרים'));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(out.date)) return fail(tr('אין תאריך מכירה'));
   const problem = titleProblem(title, it);
   if (problem) return fail(problem);
   out.ok = true;
@@ -513,11 +514,11 @@ function fanaticsApiSale(i, it, today = todayStr()) {
   const g = gradeOf(it);
   out.price = Number(i.price);
   out.date = String(i.soldAt || '').slice(0, 10);
-  if (String(i.saleType || '').toUpperCase() === 'FIXED') return fail('לא מכירה פומבית');
-  if ((i.currency && i.currency !== 'USD') || !(out.price > 0)) return fail('המחיר אינו בדולרים');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(out.date)) return fail('אין תאריך מכירה');
-  if ((toMs(today) - toMs(out.date)) / 864e5 > FANATICS_MAX_AGE_DAYS) return fail('מכירה ישנה');
-  if (String(i.gradingService || '').toUpperCase() !== g.company || Number(i.grade) !== Number(g.value)) return fail(`הדירוג אינו ${g.company} ${g.value}`);
+  if (String(i.saleType || '').toUpperCase() === 'FIXED') return fail(tr('לא מכירה פומבית'));
+  if ((i.currency && i.currency !== 'USD') || !(out.price > 0)) return fail(tr('המחיר אינו בדולרים'));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(out.date)) return fail(tr('אין תאריך מכירה'));
+  if ((toMs(today) - toMs(out.date)) / 864e5 > FANATICS_MAX_AGE_DAYS) return fail(tr('מכירה ישנה'));
+  if (String(i.gradingService || '').toUpperCase() !== g.company || Number(i.grade) !== Number(g.value)) return fail(tr('הדירוג אינו {grade}', { grade: `${g.company} ${g.value}` }));
   const problem = titleProblem(title, it, { skipGrade: true });
   if (problem) return fail(problem);
   out.ok = true;
@@ -536,9 +537,9 @@ function setFewSales(it, sales) {
   else delete it.compsFew;
 }
 function compsStatusHtml(it) {
-  if (it.ebay) return `<button class="tag-btn" type="button" data-ebay-info="${esc(it.key)}">${it.ebay.sales.length} מכירות · ${timeAgo(it.ebay.fetchedAt)}</button>`;
-  if (it.compsFew) return `<button class="tag-btn" type="button" data-ebay-info="${esc(it.key)}">רק ${it.compsFew.length} מכירות, לפי Collectr</button>`;
-  if (it.compsNoSales) return '<span class="muted">אין מכירות, לפי Collectr</span>';
+  if (it.ebay) return `<button class="tag-btn" type="button" data-ebay-info="${esc(it.key)}">${tr('{n} מכירות', { n: it.ebay.sales.length })} · ${timeAgo(it.ebay.fetchedAt)}</button>`;
+  if (it.compsFew) return `<button class="tag-btn" type="button" data-ebay-info="${esc(it.key)}">${tr('רק {n} מכירות, לפי Collectr', { n: it.compsFew.length })}</button>`;
+  if (it.compsNoSales) return `<span class="muted">${tr('אין מכירות, לפי Collectr')}</span>`;
   return '';
 }
 function compsIsDue(it, maxAgeDays) {
@@ -578,7 +579,7 @@ async function runCompsUpdate({ maxAgeDays = COMPS_REFRESH_DAYS, limit = Infinit
   try {
     for (let n = 0; n < cards.length; n++) {
       const it = cards[n];
-      compsUi.progress = `מעדכן ${n + 1} מתוך ${cards.length}: ${it.name}`;
+      compsUi.progress = tr('מעדכן {i} מתוך {total}: {name}', { i: n + 1, total: cards.length, name: it.name });
       renderCompsProgress();
       const query = ebayQuery(it);
       try {
@@ -639,7 +640,7 @@ async function runCompsUpdate({ maxAgeDays = COMPS_REFRESH_DAYS, limit = Infinit
     render();
     renderCompsProgress();
   }
-  if (updated) toast(`עודכנו ${updated} קלפים מדורגים לפי מכירות אחרונות`);
+  if (updated) toast(tr('עודכנו {n} קלפים מדורגים לפי מכירות אחרונות', { n: updated }));
 }
 function openCompsDialog() {
   const dlg = $('compsDialog');
@@ -648,44 +649,44 @@ function openCompsDialog() {
   const dueToday = compsDueItems(1).length;
   const rows = graded.map((i) => {
     const gap = i.ebay && i.collectrPrice > 0 ? (i.ebay.value - i.collectrPrice) / i.collectrPrice : 0;
-    const big = Math.abs(gap) > 0.5 ? '<span class="tag warn-tag">פער גדול</span>' : '';
-    const status = compsStatusHtml(i) || '<span class="muted">טרם עודכן</span>';
+    const big = Math.abs(gap) > 0.5 ? `<span class="tag warn-tag">${tr('פער גדול')}</span>` : '';
+    const status = compsStatusHtml(i) || `<span class="muted">${tr('טרם עודכן')}</span>`;
     return `<tr><td>${esc(i.name)} <span class="muted">${esc(gradeText(i))}</span>${big}</td>
       <td>${i.ebay ? usd(i.ebay.value) : '—'}</td><td>${usd(i.collectrPrice ?? i.price)}</td><td>${status}</td></tr>`;
   }).join('');
   const keyForm = `<form id="compsKeyForm" class="key-form">
-      <label class="field">מפתח API של CompSniper
-        <input type="password" name="key" autocomplete="off" spellcheck="false" dir="ltr" placeholder="${compsUi.hasKey ? 'להחלפת המפתח השמור' : 'cs_live_...'}" required>
+      <label class="field">${tr('מפתח API של CompSniper')}
+        <input type="password" name="key" autocomplete="off" spellcheck="false" dir="ltr" placeholder="${compsUi.hasKey ? tr('להחלפת המפתח השמור') : 'cs_live_...'}" required>
       </label>
-      <button class="btn${compsUi.hasKey ? '' : ' primary'}" type="submit">שמירת מפתח</button>
+      <button class="btn${compsUi.hasKey ? '' : ' primary'}" type="submit">${tr('שמירת מפתח')}</button>
     </form>`;
   dlg.innerHTML = `
-    <h3 style="font-size:17px;font-weight:650">מחירי קלפים מדורגים</h3>
-    <p class="muted" style="margin-top:4px">הערך הוא ממוצע 5 המכירות הפומביות האחרונות ב-eBay, עם השלמה מ-Fanatics כשאין מספיק. אם גם אז יש פחות מ-5, הקלף נשאר לפי Collectr. העדכון רץ פעם בשבוע כשהאפליקציה פתוחה.</p>
+    <h3 style="font-size:17px;font-weight:650">${tr('מחירי קלפים מדורגים')}</h3>
+    <p class="muted" style="margin-top:4px">${tr('הערך הוא ממוצע 5 המכירות הפומביות האחרונות ב-eBay, עם השלמה מ-Fanatics כשאין מספיק. אם גם אז יש פחות מ-5, הקלף נשאר לפי Collectr. העדכון רץ פעם בשבוע כשהאפליקציה פתוחה.')}</p>
     ${compsUi.hasKey ? `
-      <label class="check-row"><input type="checkbox" id="compsPortfolioToggle" ${current.comps ? 'checked' : ''}> עדכון מחירי מדורגים בתיק <b>${esc(current.name)}</b></label>
-      <p class="muted">המכסה החודשית משותפת לכל התיקים: כל קלף מדורג צורך בקשה אחת בשבוע${graded.length ? `, ובתיק הזה יש ${graded.length}` : ''}. כשהעדכון כבוי, הקלפים בתיק מתומחרים לפי Collectr.</p>
+      <label class="check-row"><input type="checkbox" id="compsPortfolioToggle" ${current.comps ? 'checked' : ''}> ${tr('עדכון מחירי מדורגים בתיק <b>{name}</b>', { name: esc(current.name) })}</label>
+      <p class="muted">${tr('המכסה החודשית משותפת לכל התיקים: כל קלף מדורג צורך בקשה אחת בשבוע')}${graded.length ? tr(', ובתיק הזה יש {n}', { n: graded.length }) : ''}${tr('. כשהעדכון כבוי, הקלפים בתיק מתומחרים לפי Collectr.')}</p>
     ` : ''}
     ${compsUi.hasKey ? `
       <div class="preview">
-        <div class="row"><span>בקשות שהאפליקציה שלחה החודש</span><b><span class="num">${compsUi.usedThisMonth} / ${compsUi.cap}</span></b></div>
-        ${usage ? `<div class="row"><span>נשארו לפי CompSniper</span><b><span class="num">${usage.remaining} / ${usage.limit}</span></b></div>` : ''}
-        ${state.meta.compsLastRun ? `<div class="row"><span>עדכון אחרון</span><b>${timeAgo(state.meta.compsLastRun)}</b></div>` : ''}
+        <div class="row"><span>${tr('בקשות שהאפליקציה שלחה החודש')}</span><b><span class="num">${compsUi.usedThisMonth} / ${compsUi.cap}</span></b></div>
+        ${usage ? `<div class="row"><span>${tr('נשארו לפי CompSniper')}</span><b><span class="num">${usage.remaining} / ${usage.limit}</span></b></div>` : ''}
+        ${state.meta.compsLastRun ? `<div class="row"><span>${tr('עדכון אחרון')}</span><b>${timeAgo(state.meta.compsLastRun)}</b></div>` : ''}
       </div>
       ${compsUi.running ? `<p class="muted" style="margin-top:8px">${esc(compsUi.progress)}</p>` : ''}
-      ${state.meta.compsError ? `<p class="warn-line">${esc(state.meta.compsError)}</p>` : ''}
+      ${state.meta.compsError ? `<p class="warn-line">${esc(tm(state.meta.compsError))}</p>` : ''}
     ` : `
       <ol class="steps">
-        <li>נרשמים ל-<a href="https://compsniper.com/pricing" target="_blank" rel="noopener noreferrer">CompSniper</a> במסלול <b>Basic</b> בחינם. <b>לא מזינים אמצעי תשלום.</b></li>
-        <li>מעתיקים את מפתח ה-API מהחשבון ומדביקים כאן. הוא נשמר רק במחשב הזה.</li>
+        <li>${tr('נרשמים ל-{link} במסלול <b>Basic</b> בחינם. <b>לא מזינים אמצעי תשלום.</b>', { link: '<a href="https://compsniper.com/pricing" target="_blank" rel="noopener noreferrer">CompSniper</a>' })}</li>
+        <li>${tr('מעתיקים את מפתח ה-API מהחשבון ומדביקים כאן. הוא נשמר רק במחשב הזה.')}</li>
       </ol>`}
     ${keyForm}
     <p id="compsError" class="error" hidden></p>
-    ${graded.length ? `<div class="scroll comps-table"><table><thead><tr><th>קלף</th><th>ממוצע מכירות</th><th>Collectr</th><th>סטטוס</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}
+    ${graded.length ? `<div class="scroll comps-table"><table><thead><tr><th>${tr('קלף')}</th><th>${tr('ממוצע מכירות')}</th><th>Collectr</th><th>${tr('סטטוס')}</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}
     <div class="dialog-actions" style="flex-wrap:wrap">
-      ${compsUi.hasKey && current.comps ? `<button class="btn primary" type="button" data-comps-run ${compsUi.running || !dueToday ? 'disabled' : ''}>${dueToday ? `עדכון עכשיו (${dueToday} קלפים)` : 'הכול עודכן היום'}</button>` : ''}
-      ${compsUi.hasKey ? '<button class="btn" type="button" data-comps-remove>הסרת המפתח</button>' : ''}
-      <button class="btn" type="button" data-close>סגירה</button>
+      ${compsUi.hasKey && current.comps ? `<button class="btn primary" type="button" data-comps-run ${compsUi.running || !dueToday ? 'disabled' : ''}>${dueToday ? tr('עדכון עכשיו ({n} קלפים)', { n: dueToday }) : tr('הכול עודכן היום')}</button>` : ''}
+      ${compsUi.hasKey ? `<button class="btn" type="button" data-comps-remove>${tr('הסרת המפתח')}</button>` : ''}
+      <button class="btn" type="button" data-close>${tr('סגירה')}</button>
     </div>`;
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
   dlg.querySelector('#compsKeyForm').addEventListener('submit', async (e) => {
@@ -693,13 +694,13 @@ function openCompsDialog() {
     const r = await fetch('/api/comps/key', { method: 'PUT', body: e.target.elements.key.value });
     if (!r.ok) {
       const p = dlg.querySelector('#compsError');
-      p.textContent = 'המפתח לא נראה תקין. העתק אותו שוב מהחשבון ב-CompSniper.';
+      p.textContent = tr('המפתח לא נראה תקין. העתק אותו שוב מהחשבון ב-CompSniper.');
       p.hidden = false;
       return;
     }
     await mutate(() => { state.meta.compsError = null; }).catch(() => {});
     await loadCompsStatus();
-    toast('המפתח נשמר');
+    toast(tr('המפתח נשמר'));
     render();
     openCompsDialog();
   });
@@ -707,11 +708,11 @@ function openCompsDialog() {
     try {
       await mutate(() => { state.meta.compsAutoEnabled = true; });
       await runCompsUpdate({ maxAgeDays: 1 });
-    } catch (e) { toast(`העדכון נכשל: ${e.message}`); }
+    } catch (e) { toast(tr('העדכון נכשל: {msg}', { msg: e.message })); }
   });
   dlg.querySelector('#compsPortfolioToggle')?.addEventListener('change', async (e) => {
     const on = e.target.checked;
-    if (compsUi.running) { e.target.checked = !on; toast('עדכון מחירים רץ כרגע, נסה שוב בסיומו'); return; }
+    if (compsUi.running) { e.target.checked = !on; toast(tr('עדכון מחירים רץ כרגע, נסה שוב בסיומו')); return; }
     try {
       if (!on) {
         // Turned off: no more updates, so the old sale prices would only go stale.
@@ -723,7 +724,7 @@ function openCompsDialog() {
         });
       }
       await savePortfolios(portfolios.map((p) => (p.id === current.id ? { ...p, comps: on } : p)));
-    } catch (err) { toast(`השמירה נכשלה: ${err.message}`); }
+    } catch (err) { toast(tr('השמירה נכשלה: {msg}', { msg: err.message })); }
     render();
     openCompsDialog();
   });
@@ -747,15 +748,15 @@ function nextEbayItem(afterKey) {
 function openEbaySearch(it) {
   const w = window.open(ebayUrl(it), 'ebay-search');
   try { if (w) w.opener = null; } catch { /* the search still opened */ }
-  toast(`נפתח חיפוש ל-${it.name}. בסיום הטעינה לוחצים שם על הסימניה.`);
+  toast(tr('נפתח חיפוש ל-{name}. בסיום הטעינה לוחצים שם על הסימניה.', { name: it.name }));
 }
 function ebayBookmarkHtml() {
-  return '<a class="bookmarklet" data-ebay-bookmark href="#" draggable="true">קריאת מכירות eBay</a>';
+  return `<a class="bookmarklet" data-ebay-bookmark href="#" draggable="true">${tr('קריאת מכירות eBay')}</a>`;
 }
 function armEbayBookmark(root) {
   root.querySelectorAll('[data-ebay-bookmark]').forEach((link) => {
     link.setAttribute('href', ebayBookmarkletCode());
-    link.addEventListener('click', (e) => { e.preventDefault(); toast('יש לגרור את הכפתור לסרגל הסימניות'); });
+    link.addEventListener('click', (e) => { e.preventDefault(); toast(tr('יש לגרור את הכפתור לסרגל הסימניות')); });
   });
 }
 function openEbayFromRow(key) {
@@ -764,15 +765,15 @@ function openEbayFromRow(key) {
   if (Object.values(state.items).some((i) => i.ebay)) { openEbaySearch(it); return; }
   const dlg = $('ebayDialog');
   dlg.innerHTML = `
-    <h3 style="font-size:17px;font-weight:650">מחירי קלפים מדורגים מ-eBay</h3>
-    <p class="muted" style="margin-top:4px">השווי נקבע לפי הממוצע של 5 המכירות הפומביות האחרונות. בדרך הזו הקריאה נעשית מהדף שאתה פותח ב-Chrome.</p>
+    <h3 style="font-size:17px;font-weight:650">${tr('מחירי קלפים מדורגים מ-eBay')}</h3>
+    <p class="muted" style="margin-top:4px">${tr('השווי נקבע לפי הממוצע של 5 המכירות הפומביות האחרונות. בדרך הזו הקריאה נעשית מהדף שאתה פותח ב-Chrome.')}</p>
     <ol class="steps">
-      <li><b>פעם אחת בלבד:</b> גרור את הכפתור הזה לסרגל הסימניות.<br>${ebayBookmarkHtml()}</li>
-      <li>פתח את החיפוש של הקלף והמתן לטעינה.<br>
-        <button class="btn small" type="button" data-open-search style="margin-top:4px">פתיחת החיפוש של ${esc(it.name)}</button></li>
-      <li>לחץ על הסימניה. האפליקציה תראה אילו מכירות נכללו, ושום דבר לא נשמר לפני אישור שלך.</li>
+      <li>${tr('<b>פעם אחת בלבד:</b> גרור את הכפתור הזה לסרגל הסימניות.')}<br>${ebayBookmarkHtml()}</li>
+      <li>${tr('פתח את החיפוש של הקלף והמתן לטעינה.')}<br>
+        <button class="btn small" type="button" data-open-search style="margin-top:4px">${tr('פתיחת החיפוש של {name}', { name: esc(it.name) })}</button></li>
+      <li>${tr('לחץ על הסימניה. האפליקציה תראה אילו מכירות נכללו, ושום דבר לא נשמר לפני אישור שלך.')}</li>
     </ol>
-    <div class="dialog-actions"><button class="btn" type="button" data-close>סגירה</button></div>`;
+    <div class="dialog-actions"><button class="btn" type="button" data-close>${tr('סגירה')}</button></div>`;
   armEbayBookmark(dlg);
   dlg.querySelector('[data-open-search]').addEventListener('click', () => openEbaySearch(it));
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
@@ -786,53 +787,53 @@ function openEbayReview(payload, selectedKey) {
   const graded = gradedItems().sort((a, b) => a.name.localeCompare(b.name));
   const it = (selectedKey && state.items[selectedKey]) || itemForEbayUrl(payload.url);
   const options = graded.map((i) => `<option value="${esc(i.key)}" ${it && i.key === it.key ? 'selected' : ''}>${esc(i.name)} · ${esc(i.number)} · ${esc(gradeText(i))}</option>`).join('');
-  const select = `<label class="field">קלף<select id="ebayItem"><option value="">בחר קלף</option>${options}</select></label>`;
+  const select = `<label class="field">${tr('קלף')}<select id="ebayItem"><option value="">${tr('בחר קלף')}</option>${options}</select></label>`;
   const validSearch = isEbayAuctionSearch(payload.url);
   const res = it && validSearch ? evaluateEbay(payload.rows || [], it) : null;
   let body = '';
   if (!validSearch) {
-    body = '<p class="warn-line">הדף הזה אינו חיפוש של מכירות פומביות שהסתיימו, ולכן לא נקרא ממנו מחיר. יש לפתוח את החיפוש מכפתור eBay באפליקציה.</p>';
+    body = `<p class="warn-line">${tr('הדף הזה אינו חיפוש של מכירות פומביות שהסתיימו, ולכן לא נקרא ממנו מחיר. יש לפתוח את החיפוש מכפתור eBay באפליקציה.')}</p>`;
   } else if (!it) {
-    body = '<p class="warn-line">לא זיהיתי לאיזה קלף שייך החיפוש. בחר קלף מהרשימה.</p>';
+    body = `<p class="warn-line">${tr('לא זיהיתי לאיזה קלף שייך החיפוש. בחר קלף מהרשימה.')}</p>`;
   } else if (!(payload.rows || []).length) {
-    body = '<p class="warn-line">לא נקראו תוצאות מהדף. ייתכן ש-eBay שינה את מבנה הדף, או שאין תוצאות לחיפוש הזה.</p>';
+    body = `<p class="warn-line">${tr('לא נקראו תוצאות מהדף. ייתכן ש-eBay שינה את מבנה הדף, או שאין תוצאות לחיפוש הזה.')}</p>`;
   } else if (!res.used.length) {
-    body = `<p class="warn-line">לא נמצאה מכירה שתואמת בדיוק לקלף ולדירוג, והמחיר הנוכחי נשאר (${usd(it.price)}).</p>`;
+    body = `<p class="warn-line">${tr('לא נמצאה מכירה שתואמת בדיוק לקלף ולדירוג, והמחיר הנוכחי נשאר ({price}).', { price: usd(it.price) })}</p>`;
   } else {
     body = res.used.length < EBAY_SALES_USED
-      ? `<p class="warn-line">נמצאו רק ${res.used.length} מכירות מתאימות, פחות מ-5, ולכן הקלף נשאר לפי המחיר הנוכחי (${usd(it.price)}).</p>
-        <h4 class="sales-head">המכירות שנמצאו</h4>${salesRowsHtml(res.used)}`
+      ? `<p class="warn-line">${tr('נמצאו רק {n} מכירות מתאימות, פחות מ-5, ולכן הקלף נשאר לפי המחיר הנוכחי ({price}).', { n: res.used.length, price: usd(it.price) })}</p>
+        <h4 class="sales-head">${tr('המכירות שנמצאו')}</h4>${salesRowsHtml(res.used)}`
       : `<div class="preview">
-        <div class="row"><span>ממוצע של ${res.used.length} המכירות האחרונות</span><b>${usd(res.value)}</b></div>
-        <div class="row"><span>${it.ebay ? 'מחיר מכירות קודם' : 'מחיר Collectr'}</span><b>${usd(it.price)}</b></div>
+        <div class="row"><span>${tr('ממוצע של {n} המכירות האחרונות', { n: res.used.length })}</span><b>${usd(res.value)}</b></div>
+        <div class="row"><span>${it.ebay ? tr('מחיר מכירות קודם') : tr('מחיר Collectr')}</span><b>${usd(it.price)}</b></div>
       </div>
-      <h4 class="sales-head">המכירות שנכללו</h4>${salesRowsHtml(res.used)}`;
+      <h4 class="sales-head">${tr('המכירות שנכללו')}</h4>${salesRowsHtml(res.used)}`;
   }
   const rejected = res && res.rejected.length
-    ? `<details class="chart-table"><summary>${res.rejected.length} תוצאות לא נכללו</summary><div class="scroll">${res.rejected.map((r) => `<div class="sale"><span class="sale-title">${esc(r.title)}</span><span class="sale-meta">${esc(r.reason)}</span></div>`).join('')}</div></details>`
+    ? `<details class="chart-table"><summary>${tr('{n} תוצאות לא נכללו', { n: res.rejected.length })}</summary><div class="scroll">${res.rejected.map((r) => `<div class="sale"><span class="sale-title">${esc(r.title)}</span><span class="sale-meta">${esc(r.reason)}</span></div>`).join('')}</div></details>`
     : '';
   const next = it ? nextEbayItem(it.key) : null;
   dlg.innerHTML = `
-    <h3 style="font-size:17px;font-weight:650;margin-bottom:10px">מכירות פומביות מ-eBay</h3>
+    <h3 style="font-size:17px;font-weight:650;margin-bottom:10px">${tr('מכירות פומביות מ-eBay')}</h3>
     ${select}
     <div style="margin-top:10px">${body}</div>
     ${rejected}
     <p id="ebayError" class="error" hidden></p>
     <div class="dialog-actions" style="flex-wrap:wrap">
-      ${res && res.used.length >= EBAY_SALES_USED ? `${next ? '<button class="btn primary" type="button" data-save-next>שמירה ולקלף הבא</button>' : ''}<button class="btn${next ? '' : ' primary'}" type="button" data-save>שמירה</button>` : ''}
-      ${it?.ebay ? '<button class="btn" type="button" data-revert>חזרה למחיר Collectr</button>' : ''}
-      <button class="btn" type="button" data-close>סגירה</button>
+      ${res && res.used.length >= EBAY_SALES_USED ? `${next ? `<button class="btn primary" type="button" data-save-next>${tr('שמירה ולקלף הבא')}</button>` : ''}<button class="btn${next ? '' : ' primary'}" type="button" data-save>${tr('שמירה')}</button>` : ''}
+      ${it?.ebay ? `<button class="btn" type="button" data-revert>${tr('חזרה למחיר Collectr')}</button>` : ''}
+      <button class="btn" type="button" data-close>${tr('סגירה')}</button>
     </div>`;
   dlg.querySelector('#ebayItem').addEventListener('change', (e) => openEbayReview(payload, e.target.value));
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
-  const fail = (e) => { const p = dlg.querySelector('#ebayError'); p.textContent = `השמירה נכשלה: ${e.message}`; p.hidden = false; };
+  const fail = (e) => { const p = dlg.querySelector('#ebayError'); p.textContent = tr('השמירה נכשלה: {msg}', { msg: e.message }); p.hidden = false; };
   const saveThen = async (after) => {
     try {
       await mutate(() => applyEbayPrice(it.key, res, ebayQuery(it)));
     } catch (e) { fail(e); return; }
     dlg.close();
     render();
-    toast(`${it.name}: ${money('$', res.value, 2)} לפי ${res.used.length} מכירות`);
+    toast(tr('{name}: {price} לפי {n} מכירות', { name: it.name, price: money('$', res.value, 2), n: res.used.length }));
     if (after) after();
   };
   dlg.querySelector('[data-save]')?.addEventListener('click', () => saveThen());
@@ -844,7 +845,7 @@ function openEbayReview(payload, selectedKey) {
     } catch (e) { fail(e); return; }
     dlg.close();
     render();
-    toast(`${it.name} חזר למחיר של Collectr`);
+    toast(tr('{name} חזר למחיר של Collectr', { name: it.name }));
   });
   if (!dlg.open) dlg.showModal();
 }
@@ -854,26 +855,26 @@ function openEbayCardInfo(key) {
   if (!it.ebay) {
     dlg.innerHTML = `
       <h3 style="font-size:17px;font-weight:650">${esc(it.name)} · ${esc(gradeText(it))}</h3>
-      <p class="muted" style="margin-top:4px">נמצאו רק ${(it.compsFew || []).length} מכירות מתאימות, פחות מ-5, ולכן הקלף מתומחר לפי Collectr (${usd(it.price)}). הוא ייבדק שוב בעדכון הבא.</p>
-      <h4 class="sales-head">המכירות שנמצאו (לא נספרו)</h4>${salesRowsHtml(it.compsFew || [])}
-      <div class="dialog-actions"><button class="btn" type="button" data-close>סגירה</button></div>`;
+      <p class="muted" style="margin-top:4px">${tr('נמצאו רק {n} מכירות מתאימות, פחות מ-5, ולכן הקלף מתומחר לפי Collectr ({price}). הוא ייבדק שוב בעדכון הבא.', { n: (it.compsFew || []).length, price: usd(it.price) })}</p>
+      <h4 class="sales-head">${tr('המכירות שנמצאו (לא נספרו)')}</h4>${salesRowsHtml(it.compsFew || [])}
+      <div class="dialog-actions"><button class="btn" type="button" data-close>${tr('סגירה')}</button></div>`;
     dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
     if (!dlg.open) dlg.showModal();
     return;
   }
   dlg.innerHTML = `
     <h3 style="font-size:17px;font-weight:650">${esc(it.name)} · ${esc(gradeText(it))}</h3>
-    <p class="muted" style="margin-top:4px">עודכן ${timeAgo(it.ebay.fetchedAt)}. ממוצע מכירות ${usd(it.ebay.value)}, מחיר Collectr ${usd(it.collectrPrice)}.${compsUi.hasKey ? ' חזרה למחיר Collectr תחזיק עד העדכון האוטומטי הבא.' : ''}</p>
-    <h4 class="sales-head">המכירות שנכללו</h4>${salesRowsHtml(it.ebay.sales)}
+    <p class="muted" style="margin-top:4px">${tr('עודכן {when}. ממוצע מכירות {avg}, מחיר Collectr {price}.', { when: timeAgo(it.ebay.fetchedAt), avg: usd(it.ebay.value), price: usd(it.collectrPrice) })}${compsUi.hasKey ? tr(' חזרה למחיר Collectr תחזיק עד העדכון האוטומטי הבא.') : ''}</p>
+    <h4 class="sales-head">${tr('המכירות שנכללו')}</h4>${salesRowsHtml(it.ebay.sales)}
     <div class="dialog-actions" style="flex-wrap:wrap">
-      <button class="btn primary" type="button" data-open-search>עדכון מ-eBay</button>
-      <button class="btn" type="button" data-revert>חזרה למחיר Collectr</button>
-      <button class="btn" type="button" data-close>סגירה</button>
+      <button class="btn primary" type="button" data-open-search>${tr('עדכון מ-eBay')}</button>
+      <button class="btn" type="button" data-revert>${tr('חזרה למחיר Collectr')}</button>
+      <button class="btn" type="button" data-close>${tr('סגירה')}</button>
     </div>`;
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
   dlg.querySelector('[data-open-search]').addEventListener('click', () => { dlg.close(); openEbaySearch(it); });
   dlg.querySelector('[data-revert]').addEventListener('click', async () => {
-    try { await mutate(() => revertEbayPrice(key)); } catch (e) { toast(`השמירה נכשלה: ${e.message}`); return; }
+    try { await mutate(() => revertEbayPrice(key)); } catch (e) { toast(tr('השמירה נכשלה: {msg}', { msg: e.message })); return; }
     dlg.close();
     render();
   });
@@ -883,20 +884,20 @@ function ebayBookmarkletCode() {
   // Reads only what is already on the page the user opened. The filtering lives in the app.
   const code = `(()=>{
 const S='${location.origin}';
-if(!/^https:\\/\\/www\\.ebay\\.com\\/sch\\//.test(location.href)){alert('יש ללחוץ על הסימניה בדף חיפוש של eBay שנפתח מהאפליקציה.');return}
+if(!/^https:\\/\\/www\\.ebay\\.com\\/sch\\//.test(location.href)){alert(${jsq('יש ללחוץ על הסימניה בדף חיפוש של eBay שנפתח מהאפליקציה.')});return}
 const w=window.open(S+'/','portfolio-tracker');
-if(!w){alert('הדפדפן חסם את פתיחת האפליקציה. יש לאשר חלונות קופצים מהאתר הזה ולנסות שוב.');return}
+if(!w){alert(${jsq('הדפדפן חסם את פתיחת האפליקציה. יש לאשר חלונות קופצים מהאתר הזה ולנסות שוב.')});return}
 const T=(l,q)=>{const e=l.querySelector(q);return e?e.innerText.trim():''};
 const rows=[...document.querySelectorAll('li.s-card,li.s-item')].map(l=>{const a=l.querySelector('a[href*="/itm/"]');return a?{url:a.href.split('?')[0],title:T(l,'.s-card__title,.s-item__title').split('\\n')[0],price:T(l,'.s-card__price,.s-item__price'),text:l.innerText.slice(0,800)}:null}).filter(Boolean);
 const D={sentAt:new Date().toISOString(),url:location.href,rows};
 const b=document.createElement('div');
-b.style='position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;background:#111;color:#fff;padding:10px 18px;border-radius:10px;font:15px system-ui;direction:rtl';
-b.textContent='נקראו '+rows.length+' תוצאות, שולח לאפליקציה…';document.body.append(b);
+b.style='position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;background:#111;color:#fff;padding:10px 18px;border-radius:10px;font:15px system-ui;direction:${langDir()}';
+b.textContent=${jsq('נקראו {n} תוצאות, שולח לאפליקציה…')}.replace('{n}',rows.length);document.body.append(b);
 let i,t;const done=()=>{clearInterval(i);clearTimeout(t);removeEventListener('message',h)};
-const h=e=>{if(e.origin===S&&e.data&&e.data.type==='ebay-sales-ack'&&e.data.sentAt===D.sentAt){done();b.textContent='✓ נשלח לאפליקציה';setTimeout(()=>b.remove(),3000)}};
+const h=e=>{if(e.origin===S&&e.data&&e.data.type==='ebay-sales-ack'&&e.data.sentAt===D.sentAt){done();b.textContent=${jsq('✓ נשלח לאפליקציה')};setTimeout(()=>b.remove(),3000)}};
 addEventListener('message',h);
 i=setInterval(()=>w.postMessage({type:'ebay-sales',payload:D},S),700);
-t=setTimeout(()=>{done();b.style.background='#b92f2f';b.textContent='האפליקציה לא ענתה. האם היא פועלת?';setTimeout(()=>b.remove(),9000)},20000)
+t=setTimeout(()=>{done();b.style.background='#b92f2f';b.textContent=${jsq('האפליקציה לא ענתה. האם היא פועלת?')};setTimeout(()=>b.remove(),9000)},20000)
 })()`;
   return `javascript:${encodeURIComponent(code.replace(/\n/g, ''))}`;
 }
@@ -972,13 +973,13 @@ async function savePortfolios(list) {
 }
 function renderPortfolioPicker() {
   $('portfolioSelect').innerHTML = portfolios.map((p) => `<option value="${esc(p.id)}" ${p.id === current.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-  $('tableTitle').textContent = `המוצרים בתיק ${current.name}`;
-  document.title = portfolios.length > 1 ? `${current.name} · מעקב תיק קלפים` : 'מעקב תיק קלפים';
+  $('tableTitle').textContent = tr('המוצרים בתיק {name}', { name: current.name });
+  document.title = portfolios.length > 1 ? `${current.name} · ${tr('מעקב תיק קלפים')}` : tr('מעקב תיק קלפים');
 }
 async function switchPortfolio(id) {
   if (id === current.id) return;
   if (compsUi.running) {
-    toast('עדכון מחירי מדורגים רץ כרגע, אפשר לעבור תיק בסיומו');
+    toast(tr('עדכון מחירי מדורגים רץ כרגע, אפשר לעבור תיק בסיומו'));
     renderPortfolioPicker();
     return;
   }
@@ -1004,34 +1005,34 @@ function openPortfoliosDialog(found) {
   const dlg = $('portfoliosDialog');
   const rows = portfolios.map((p) => `
     <div class="portfolio-row">
-      <input type="text" value="${esc(p.name)}" maxlength="60" data-rename="${esc(p.id)}" aria-label="שם התיק">
-      <span class="muted"><bdi dir="ltr">@${esc(p.handle)}</bdi> · ${esc(p.collectionName)}${p.id === current.id ? ' · פתוח עכשיו' : ''}</span>
-      ${portfolios.length > 1 ? `<button class="btn small ghost" type="button" data-remove-portfolio="${esc(p.id)}">הסרה</button>` : ''}
+      <input type="text" value="${esc(p.name)}" maxlength="60" data-rename="${esc(p.id)}" aria-label="${tr('שם התיק')}">
+      <span class="muted"><bdi dir="ltr">@${esc(p.handle)}</bdi> · ${esc(p.collectionName)}${p.id === current.id ? ` · ${tr('פתוח עכשיו')}` : ''}</span>
+      ${portfolios.length > 1 ? `<button class="btn small ghost" type="button" data-remove-portfolio="${esc(p.id)}">${tr('הסרה')}</button>` : ''}
     </div>`).join('');
   const pick = found ? `
     <div class="add-step">
-      <p>נמצא הפרופיל של <b>${esc(found.user)}</b>. איזה תיק לעקוב?</p>
-      <label class="field">תיק<select id="newCollection">${found.collections.map((c) => {
+      <p>${tr('נמצא הפרופיל של <b>{user}</b>. איזה תיק לעקוב?', { user: esc(found.user) })}</p>
+      <label class="field">${tr('תיק')}<select id="newCollection">${found.collections.map((c) => {
         const taken = portfolios.some((p) => p.handle.toLowerCase() === found.handle.toLowerCase() && p.collectionId === c.id);
-        return `<option value="${esc(c.id)}" ${taken ? 'disabled' : ''}>${esc(c.name)}${c.default ? ' (ראשי)' : ''}${taken ? ' · כבר במעקב' : ''}</option>`;
+        return `<option value="${esc(c.id)}" ${taken ? 'disabled' : ''}>${esc(c.name)}${c.default ? ` (${tr('ראשי')})` : ''}${taken ? ` · ${tr('כבר במעקב')}` : ''}</option>`;
       }).join('')}</select></label>
-      <label class="field">שם במעקב<input type="text" id="newName" maxlength="60"></label>
-      <div class="dialog-actions"><button class="btn primary" type="button" data-add-portfolio>הוספת התיק</button></div>
+      <label class="field">${tr('שם במעקב')}<input type="text" id="newName" maxlength="60"></label>
+      <div class="dialog-actions"><button class="btn primary" type="button" data-add-portfolio>${tr('הוספת התיק')}</button></div>
     </div>` : '';
   dlg.innerHTML = `
-    <h3 style="font-size:17px;font-weight:650">התיקים במעקב</h3>
-    <p class="muted" style="margin-top:4px">לכל תיק נשמרים בנפרד המוצרים, הרכישות וההיסטוריה. שינוי שם נשמר כשיוצאים מהשדה.</p>
+    <h3 style="font-size:17px;font-weight:650">${tr('התיקים במעקב')}</h3>
+    <p class="muted" style="margin-top:4px">${tr('לכל תיק נשמרים בנפרד המוצרים, הרכישות וההיסטוריה. שינוי שם נשמר כשיוצאים מהשדה.')}</p>
     <div class="portfolio-list">${rows}</div>
-    <h4 class="sales-head">הוספת תיק</h4>
+    <h4 class="sales-head">${tr('הוספת תיק')}</h4>
     <form id="addPortfolioForm" class="key-form">
-      <label class="field">קישור לפרופיל ב-Collectr
+      <label class="field">${tr('קישור לפרופיל ב-Collectr')}
         <input type="text" name="link" dir="ltr" placeholder="https://app.getcollectr.com/showcase/profile/@..." value="${found ? esc(profileUrl(found)) : ''}" required>
       </label>
-      <button class="btn" type="submit">בדיקת הקישור</button>
+      <button class="btn" type="submit">${tr('בדיקת הקישור')}</button>
     </form>
     <p id="portfolioError" class="error" hidden></p>
     ${pick}
-    <div class="dialog-actions"><button class="btn" type="button" data-close>סגירה</button></div>`;
+    <div class="dialog-actions"><button class="btn" type="button" data-close>${tr('סגירה')}</button></div>`;
   const fail = (m) => { const p = dlg.querySelector('#portfolioError'); p.textContent = m; p.hidden = false; };
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
   dlg.querySelectorAll('[data-rename]').forEach((input) => input.addEventListener('change', async () => {
@@ -1039,32 +1040,32 @@ function openPortfoliosDialog(found) {
     if (!name) { input.value = portfolios.find((p) => p.id === input.dataset.rename).name; return; }
     try {
       await savePortfolios(portfolios.map((p) => (p.id === input.dataset.rename ? { ...p, name } : p)));
-      toast('השם נשמר');
-    } catch (e) { fail(`השמירה נכשלה: ${e.message}`); }
+      toast(tr('השם נשמר'));
+    } catch (e) { fail(tr('השמירה נכשלה: {msg}', { msg: e.message })); }
   }));
   dlg.querySelectorAll('[data-remove-portfolio]').forEach((b) => b.addEventListener('click', async () => {
     const p = portfolios.find((x) => x.id === b.dataset.removePortfolio);
-    if (!confirm(`להסיר את "${p.name}" מהמעקב? הנתונים שלו נשארים שמורים במחשב, אבל הוא לא יופיע באפליקציה.`)) return;
+    if (!confirm(tr('להסיר את "{name}" מהמעקב? הנתונים שלו נשארים שמורים במחשב, אבל הוא לא יופיע באפליקציה.', { name: p.name }))) return;
     try {
       const rest = portfolios.filter((x) => x.id !== p.id);
       if (p.id === current.id) await switchPortfolio(rest[0].id);
       await savePortfolios(rest);
       openPortfoliosDialog();
-    } catch (e) { fail(`ההסרה נכשלה: ${e.message}`); }
+    } catch (e) { fail(tr('ההסרה נכשלה: {msg}', { msg: e.message })); }
   }));
   dlg.querySelector('#addPortfolioForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const handle = parseProfileLink(e.target.elements.link.value);
-    if (!handle) { fail('זה לא נראה קישור לפרופיל ב-Collectr. הקישור צריך להכיל showcase/profile/@'); return; }
+    if (!handle) { fail(tr('זה לא נראה קישור לפרופיל ב-Collectr. הקישור צריך להכיל showcase/profile/@')); return; }
     const btn = e.target.querySelector('button');
     btn.disabled = true;
     try {
       const data = await fetchProfilePage(handle);
       const collections = (data.collections || []).filter((c) => c.id && c.name);
-      if (!collections.length) throw new Error('לא נמצאו תיקים בפרופיל');
+      if (!collections.length) throw new Error(tr('לא נמצאו תיקים בפרופיל'));
       openPortfoliosDialog({ handle: data.handle || handle, user: data.user || handle, collections });
     } catch (err) {
-      fail(`לא הצלחתי לקרוא את הפרופיל. ודא שהקישור נכון ושהתיק מוצג לציבור ב-Collectr. (${err.message})`);
+      fail(tr('לא הצלחתי לקרוא את הפרופיל. ודא שהקישור נכון ושהתיק מוצג לציבור ב-Collectr. ({msg})', { msg: err.message }));
     } finally { btn.disabled = false; }
   });
   if (found) {
@@ -1077,7 +1078,7 @@ function openPortfoliosDialog(found) {
     select.addEventListener('change', suggest);
     dlg.querySelector('[data-add-portfolio]').addEventListener('click', async () => {
       const c = found.collections.find((x) => x.id === select.value);
-      if (!c || select.selectedOptions[0]?.disabled) { fail('התיק הזה כבר במעקב. בחר תיק אחר.'); return; }
+      if (!c || select.selectedOptions[0]?.disabled) { fail(tr('התיק הזה כבר במעקב. בחר תיק אחר.')); return; }
       const p = {
         id: `p${Date.now().toString(36)}`, name: nameInput.value.trim() || `${c.name} · ${found.user}`,
         handle: found.handle, collectionId: c.id, collectionName: c.name, comps: false,
@@ -1087,7 +1088,7 @@ function openPortfoliosDialog(found) {
         dlg.close();
         await switchPortfolio(p.id);
         openSyncDialog();
-      } catch (err) { fail(`ההוספה נכשלה: ${err.message}`); }
+      } catch (err) { fail(tr('ההוספה נכשלה: {msg}', { msg: err.message })); }
     });
   }
   if (!dlg.open) dlg.showModal();
@@ -1104,30 +1105,30 @@ function render() {
 }
 function renderFreshness() {
   const parts = [];
-  if (state.meta.lastFull) parts.push(`סנכרון מלא ${timeAgo(state.meta.lastFull)}`);
-  if (ui.quickUnsupported) parts.push('בדיקה מהירה זמינה רק לתיק הראשי של הפרופיל');
-  else if (state.meta.lastQuick) parts.push(`בדיקה מהירה ${timeAgo(state.meta.lastQuick)}`);
+  if (state.meta.lastFull) parts.push(tr('סנכרון מלא {when}', { when: timeAgo(state.meta.lastFull) }));
+  if (ui.quickUnsupported) parts.push(tr('בדיקה מהירה זמינה רק לתיק הראשי של הפרופיל'));
+  else if (state.meta.lastQuick) parts.push(tr('בדיקה מהירה {when}', { when: timeAgo(state.meta.lastQuick) }));
   const graded = gradedItems();
   if (compsUi.running) parts.push(compsUi.progress);
-  else if (graded.length && current.comps && compsUi.hasKey) parts.push(`מדורגים לפי מכירות: ${graded.filter((i) => i.ebay).length}/${graded.length}`);
-  $('freshness').textContent = parts.join(' · ') || 'ממתין לסנכרון ראשון';
+  else if (graded.length && current.comps && compsUi.hasKey) parts.push(tr('מדורגים לפי מכירות: {done}/{total}', { done: graded.filter((i) => i.ebay).length, total: graded.length }));
+  $('freshness').textContent = parts.join(' · ') || tr('ממתין לסנכרון ראשון');
 }
 function renderBanners() {
   const out = [];
   if (!state.meta.lastFull) {
-    out.push(`<div class="banner"><span>כדי לטעון את כל המוצרים מהתיק ${esc(current.name)} צריך סנכרון ראשון.</span><button class="btn small" type="button" data-open-sync>איך מסנכרנים</button></div>`);
+    out.push(`<div class="banner"><span>${tr('כדי לטעון את כל המוצרים מהתיק {name} צריך סנכרון ראשון.', { name: esc(current.name) })}</span><button class="btn small" type="button" data-open-sync>${tr('איך מסנכרנים')}</button></div>`);
   }
   if (state.meta.changed) {
-    out.push(`<div class="banner"><span>התיק ב-Collectr השתנה מאז הסנכרון האחרון. סנכרון מלא יעדכן את כל המוצרים.</span><button class="btn small" type="button" data-open-sync>סנכרון מלא</button></div>`);
+    out.push(`<div class="banner"><span>${tr('התיק ב-Collectr השתנה מאז הסנכרון האחרון. סנכרון מלא יעדכן את כל המוצרים.')}</span><button class="btn small" type="button" data-open-sync>${tr('סנכרון מלא')}</button></div>`);
   }
   const fresh = Object.values(state.items).filter((i) => i.isNew && !i.removed && !itemPurchases(i.key).length).length;
   if (fresh) {
-    out.push(`<div class="banner"><span>${fresh === 1 ? 'מוצר חדש אחד ממתין' : `${fresh} מוצרים חדשים ממתינים`} להזנת סכום קנייה.</span><button class="btn small" type="button" data-show-new>הצג</button></div>`);
+    out.push(`<div class="banner"><span>${fresh === 1 ? tr('מוצר חדש אחד ממתין להזנת סכום קנייה.') : tr('{n} מוצרים חדשים ממתינים להזנת סכום קנייה.', { n: fresh })}</span><button class="btn small" type="button" data-show-new>${tr('הצג')}</button></div>`);
   }
-  if (state.meta.warning) out.push(`<div class="banner"><span>${esc(state.meta.warning)}</span></div>`);
-  if (ui.fxError) out.push(`<div class="banner"><span>לא הצלחתי לטעון שערים מבנק ישראל: ${esc(ui.fxError)}</span></div>`);
-  if (ui.quickError) out.push(`<div class="banner"><span>הבדיקה המהירה נכשלה: ${esc(ui.quickError)}</span></div>`);
-  if (state.meta.compsError) out.push(`<div class="banner"><span>${esc(state.meta.compsError)}</span><button class="btn small" type="button" data-open-comps>פרטים</button></div>`);
+  if (state.meta.warning) out.push(`<div class="banner"><span>${esc(tm(state.meta.warning))}</span></div>`);
+  if (ui.fxError) out.push(`<div class="banner"><span>${tr('לא הצלחתי לטעון שערים מבנק ישראל: {msg}', { msg: esc(ui.fxError) })}</span></div>`);
+  if (ui.quickError) out.push(`<div class="banner"><span>${tr('הבדיקה המהירה נכשלה: {msg}', { msg: esc(ui.quickError) })}</span></div>`);
+  if (state.meta.compsError) out.push(`<div class="banner"><span>${esc(tm(state.meta.compsError))}</span><button class="btn small" type="button" data-open-comps>${tr('פרטים')}</button></div>`);
   $('banners').innerHTML = out.join('');
 }
 function renderKpis() {
@@ -1140,18 +1141,18 @@ function renderKpis() {
   const avgRate = t.costUsd > 0 ? t.costIls / t.costUsd : null;
   const kpi = (label, value, sub) => `<div class="kpi"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div></div>`;
   $('kpis').innerHTML = [
-    kpi('שווי כל התיק היום',
+    kpi(tr('שווי כל התיק היום'),
       snap && r ? ils(snap.usd * r.rate) : '—',
-      snap ? `${usd(snap.usd)} לפי Collectr${snap.qty ? ` · ${nf0.format(snap.qty)} פריטים` : ''}` : 'ממתין לנתונים'),
-    kpi('שילמת על מוצרים שהוזנו',
+      snap ? `${tr('{usd} לפי Collectr', { usd: usd(snap.usd) })}${snap.qty ? ` · ${tr('{n} פריטים', { n: nf0.format(snap.qty) })}` : ''}` : tr('ממתין לנתונים')),
+    kpi(tr('שילמת על מוצרים שהוזנו'),
       t.count ? ils(t.costIls) : '—',
-      t.count ? `≈ ${usd(t.costUsd)} לפי שער יום הקנייה · שווים היום ${ils(t.valueIls)}` : `הוזנו ${entered} מתוך ${items.length} מוצרים`),
-    kpi('רווח או הפסד',
+      t.count ? tr('≈ {usd} לפי שער יום הקנייה · שווים היום {value}', { usd: usd(t.costUsd), value: ils(t.valueIls) }) : tr('הוזנו {done} מתוך {total} מוצרים', { done: entered, total: items.length })),
+    kpi(tr('רווח או הפסד'),
       t.count ? delta(signedIls(t.pnlIls), t.pnlIls) : '—',
-      t.count ? `${pct(pnlPct)} על ${entered} מתוך ${items.length} מוצרים שהוזנו` : 'יוצג אחרי הזנת סכום קנייה'),
-    kpi('שער דולר יציג',
+      t.count ? tr('{pct} על {done} מתוך {total} מוצרים שהוזנו', { pct: pct(pnlPct), done: entered, total: items.length }) : tr('יוצג אחרי הזנת סכום קנייה')),
+    kpi(tr('שער דולר יציג'),
       r ? rateFmt(r.rate) : '—',
-      r ? `${fmtDate(r.date)}${avgRate ? ` · שער קנייה ממוצע ${rateFmt(avgRate)}` : ''}` : 'טוען מבנק ישראל'),
+      r ? `${fmtDate(r.date)}${avgRate ? ` · ${tr('שער קנייה ממוצע {rate}', { rate: rateFmt(avgRate) })}` : ''}` : tr('טוען מבנק ישראל')),
   ].join('');
 }
 
@@ -1208,7 +1209,7 @@ function lineChart(el, { series, fmtAxis, fmtTip, markers = [], tableLabel, tabl
   }
   xTicks.forEach((d, i) => {
     const anchor = xTickCount > 1 && i === 0 ? 'start' : xTickCount > 1 && i === xTickCount - 1 ? 'end' : 'middle';
-    s += `<text class="axis-text" x="${X(d)}" y="${height - 6}" text-anchor="${anchor}">${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}</text>`;
+    s += `<text class="axis-text" x="${X(d)}" y="${height - 6}" text-anchor="${anchor}">${axisDate(d)}</text>`;
   });
   for (const ser of series) {
     if (ser.points.length > 1) {
@@ -1226,13 +1227,13 @@ function lineChart(el, { series, fmtAxis, fmtTip, markers = [], tableLabel, tabl
 
   let legend = '';
   if (series.length > 1 || markers.length) {
-    legend = `<div class="legend">${series.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join('')}${markers.length ? '<span><i class="dot" style="background:var(--series-2)"></i>רכישה</span>' : ''}</div>`;
+    legend = `<div class="legend">${series.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join('')}${markers.length ? `<span><i class="dot" style="background:var(--series-2)"></i>${tr('רכישה')}</span>` : ''}</div>`;
   }
   const rows = dates.slice(-tableRows).reverse().map((d) => `<tr><td>${plainDate(d)}</td>${series.map((x) => {
     const p = x.points.find((q) => q[0] === d);
     return `<td>${p ? `<span class="num">${esc(fmtTip(p[1]))}</span>` : '—'}</td>`;
   }).join('')}</tr>`).join('');
-  const table = `<details class="chart-table"><summary>הצגה כטבלה</summary><div class="scroll"><table><thead><tr><th>תאריך</th>${series.map((x) => `<th>${esc(x.name)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></details>`;
+  const table = `<details class="chart-table"><summary>${tr('הצגה כטבלה')}</summary><div class="scroll"><table><thead><tr><th>${tr('תאריך')}</th>${series.map((x) => `<th>${esc(x.name)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div></details>`;
 
   el.innerHTML = `${legend}${s}${table}`;
   const svg = el.querySelector('svg');
@@ -1244,7 +1245,7 @@ function lineChart(el, { series, fmtAxis, fmtTip, markers = [], tableLabel, tabl
       const p = x.points.find((q) => q[0] === d);
       return p ? `<div class="tt-row"><span>${esc(x.name)}</span><b dir="ltr">${esc(fmtTip(p[1]))}</b></div>` : '';
     }).join('');
-    const mk = markers.filter((q) => q.date === d).map((q) => `<div class="tt-row"><span>רכישה</span><b>${q.html}</b></div>`).join('');
+    const mk = markers.filter((q) => q.date === d).map((q) => `<div class="tt-row"><span>${tr('רכישה')}</span><b>${q.html}</b></div>`).join('');
     showTooltip(`<div class="tt-date">${plainDate(d)}</div>${lines}${mk}`, clientX, clientY);
   };
   let cursor = dates.length - 1;
@@ -1274,17 +1275,17 @@ function chartEmpty(el, text) { el.innerHTML = `<div class="chart-empty">${esc(t
 function renderValueChart() {
   const el = $('valueChart');
   const dates = Object.keys(state.snapshots).sort();
-  $('valueTitle').textContent = ui.valueView === 'all' ? 'שווי כל התיק בשקלים' : 'עלות מול שווי';
-  if (!fx.dates.length || !dates.length) { chartEmpty(el, 'הגרף יופיע אחרי הסנכרון הראשון.'); return; }
+  $('valueTitle').textContent = ui.valueView === 'all' ? tr('שווי כל התיק בשקלים') : tr('עלות מול שווי');
+  if (!fx.dates.length || !dates.length) { chartEmpty(el, tr('הגרף יופיע אחרי הסנכרון הראשון.')); return; }
   let series;
   if (ui.valueView === 'all') {
     series = [{
-      name: 'שווי התיק',
+      name: tr('שווי התיק'),
       color: 'var(--series-1)',
       points: dates.map((d) => [d, state.snapshots[d].usd * rateOn(d).rate]),
     }];
   } else {
-    if (!state.purchases.length) { chartEmpty(el, 'הזן סכום קנייה למוצר, והגרף יתחיל להשוות בין מה ששילמת לשווי היום.'); return; }
+    if (!state.purchases.length) { chartEmpty(el, tr('הזן סכום קנייה למוצר, והגרף יתחיל להשוות בין מה ששילמת לשווי היום.')); return; }
     const value = [], cost = [];
     for (const d of dates) {
       const ps = state.purchases.filter((p) => p.date <= d);
@@ -1297,55 +1298,56 @@ function renderValueChart() {
       }
       if (ps.length) { value.push([d, v]); cost.push([d, c]); }
     }
-    if (!value.length) { chartEmpty(el, 'הרכישות שהוזנו מתוארכות אחרי הסנכרון האחרון. הגרף יתעדכן בסנכרון הבא.'); return; }
+    if (!value.length) { chartEmpty(el, tr('הרכישות שהוזנו מתוארכות אחרי הסנכרון האחרון. הגרף יתעדכן בסנכרון הבא.')); return; }
     series = [
-      { name: 'שווי היום', color: 'var(--series-1)', points: value },
-      { name: 'שולם', color: 'var(--series-2)', points: cost },
+      { name: tr('שווי היום'), color: 'var(--series-1)', points: value },
+      { name: tr('שולם'), color: 'var(--series-2)', points: cost },
     ];
   }
   lineChart(el, {
     series,
     fmtAxis: (v) => plainIls(v),
     fmtTip: (v) => plainIls(v),
-    tableLabel: 'שווי לאורך זמן בשקלים',
+    tableLabel: tr('שווי לאורך זמן בשקלים'),
   });
   if (series[0].points.length === 1) {
-    el.insertAdjacentHTML('beforeend', '<p class="chart-note">זו נקודת הנתונים הראשונה. Collectr מציג רק מחיר נוכחי, ולכן הגרף יתמלא עם כל יום שבו האפליקציה מתעדכנת.</p>');
+    el.insertAdjacentHTML('beforeend', `<p class="chart-note">${tr('זו נקודת הנתונים הראשונה. Collectr מציג רק מחיר נוכחי, ולכן הגרף יתמלא עם כל יום שבו האפליקציה מתעדכנת.')}</p>`);
   }
 }
 
 function renderEffectChart() {
   const el = $('effectChart');
   const t = totals();
-  if (!t.count || !fx.dates.length) { chartEmpty(el, 'כאן תראה כמה מהרווח או ההפסד נובע ממחיר הקלפים וכמה משינוי שער הדולר.'); return; }
+  if (!t.count || !fx.dates.length) { chartEmpty(el, tr('כאן תראה כמה מהרווח או ההפסד נובע ממחיר הקלפים וכמה משינוי שער הדולר.')); return; }
   const width = Math.max(260, el.clientWidth || 320);
   const height = 240;
   const m = { top: 26, bottom: 44, side: 8 };
   const steps = [
-    { label: 'שולם', from: 0, to: t.costIls, kind: 'total' },
-    { label: 'מחיר קלפים', from: t.costIls, to: t.costIls + t.marketEffect, kind: 'delta', v: t.marketEffect },
-    { label: 'שער דולר', from: t.costIls + t.marketEffect, to: t.valueIls, kind: 'delta', v: t.fxEffect },
+    { label: tr('שולם'), from: 0, to: t.costIls, kind: 'total' },
+    { label: tr('מחיר קלפים'), from: t.costIls, to: t.costIls + t.marketEffect, kind: 'delta', v: t.marketEffect },
+    { label: tr('שער דולר'), from: t.costIls + t.marketEffect, to: t.valueIls, kind: 'delta', v: t.fxEffect },
   ];
   let note = '';
   if (ui.effectView === 'all') {
     // No cost is known for the rest of the portfolio, so its value is shown but never counted as profit.
     const totalIls = portfolioUsd() * currentRate().rate;
     const unknownIls = totalIls - t.valueIls;
-    steps.push({ label: 'ללא עלות', from: t.valueIls, to: totalIls, kind: 'neutral', v: unknownIls });
-    steps.push({ label: 'שווי התיק', from: 0, to: totalIls, kind: 'total' });
-    note = `<p class="chart-note">הרווח ${signedIls(t.pnlIls)} מחושב רק על פריטים שהוזנו. למוצרים ללא עלות ידועה מוצג השווי בלבד.</p>`;
+    steps.push({ label: tr('ללא עלות'), from: t.valueIls, to: totalIls, kind: 'neutral', v: unknownIls });
+    steps.push({ label: tr('שווי התיק'), from: 0, to: totalIls, kind: 'total' });
+    note = `<p class="chart-note">${tr('הרווח {pnl} מחושב רק על פריטים שהוזנו. למוצרים ללא עלות ידועה מוצג השווי בלבד.', { pnl: signedIls(t.pnlIls) })}</p>`;
   } else {
-    steps.push({ label: 'שווי היום', from: 0, to: t.valueIls, kind: 'total' });
+    steps.push({ label: tr('שווי היום'), from: 0, to: t.valueIls, kind: 'total' });
   }
   const yMax = Math.max(...steps.map((x) => Math.max(x.from, x.to))) * 1.02 || 1;
   const Y = (v) => m.top + (1 - v / yMax) * (height - m.top - m.bottom);
   const band = (width - m.side * 2) / steps.length;
   const barW = Math.min(46, band * 0.6);
-  let s = `<svg xmlns="${svgNS}" viewBox="0 0 ${width} ${height}" height="${height}" role="img" aria-label="פירוק הרווח: שולם, השפעת מחיר הקלפים, השפעת שער הדולר, שווי היום" dir="ltr">`;
+  let s = `<svg xmlns="${svgNS}" viewBox="0 0 ${width} ${height}" height="${height}" role="img" aria-label="${tr('פירוק הרווח: שולם, השפעת מחיר הקלפים, השפעת שער הדולר, שווי היום')}" dir="ltr">`;
   s += `<line x1="${m.side}" x2="${width - m.side}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--axis)"/>`;
   steps.forEach((b, i) => {
-    // Reads right to left, like the rest of the page.
-    const cx = width - m.side - band * i - band / 2;
+    // Follows the reading direction of the page.
+    const flow = langDir() === 'rtl' ? -1 : 1;
+    const cx = flow < 0 ? width - m.side - band * i - band / 2 : m.side + band * i + band / 2;
     const top = Y(Math.max(b.from, b.to)), bottom = Y(Math.min(b.from, b.to));
     const h = Math.max(2, bottom - top);
     const fill = b.kind === 'total' ? 'var(--series-1)' : b.kind === 'neutral' ? 'var(--axis-text)' : b.v >= 0 ? 'var(--bar-good)' : 'var(--bar-bad)';
@@ -1357,7 +1359,7 @@ function renderEffectChart() {
       s += `<text class="bar-label" x="${cx}" y="${height - 26 + n * 15}" text-anchor="middle">${esc(line)}</text>`;
     });
     if (i < steps.length - 1) {
-      s += `<line x1="${cx - barW / 2}" x2="${cx - band + barW / 2}" y1="${Y(b.to)}" y2="${Y(b.to)}" stroke="var(--axis)"/>`;
+      s += `<line x1="${cx + (flow * barW) / 2}" x2="${cx + flow * (band - barW / 2)}" y1="${Y(b.to)}" y2="${Y(b.to)}" stroke="var(--axis)"/>`;
     }
   });
   el.innerHTML = `${s}</svg>${note}`;
@@ -1365,23 +1367,23 @@ function renderEffectChart() {
 
 function renderFxChart() {
   const el = $('fxChart');
-  if (!fx.dates.length) { chartEmpty(el, 'טוען שערים מבנק ישראל…'); return; }
+  if (!fx.dates.length) { chartEmpty(el, tr('טוען שערים מבנק ישראל…')); return; }
   const cut = new Date(Date.now() - ui.fxRange * 864e5).toISOString().slice(0, 10);
   const firstPurchase = state.purchases.reduce((a, p) => (p.date < a ? p.date : a), cut);
   const start = firstPurchase < cut ? firstPurchase : cut;
   const points = [];
   fx.dates.forEach((d, i) => { if (d >= start) points.push([d, fx.rates[i]]); });
-  if (!points.length) { chartEmpty(el, 'אין שערים לטווח הזה.'); return; }
+  if (!points.length) { chartEmpty(el, tr('אין שערים לטווח הזה.')); return; }
   const markers = state.purchases.map((p) => {
     const it = state.items[p.key];
-    return { date: p.rateDate, value: p.rate, html: `${esc(it?.name || 'מוצר')} · ${ils(p.currency === 'USD' ? p.amount * p.rate : p.amount)}` };
+    return { date: p.rateDate, value: p.rate, html: `${esc(it?.name || tr('מוצר'))} · ${ils(p.currency === 'USD' ? p.amount * p.rate : p.amount)}` };
   });
   lineChart(el, {
-    series: [{ name: 'שער יציג', color: 'var(--series-1)', points }],
+    series: [{ name: tr('שער יציג'), color: 'var(--series-1)', points }],
     markers,
     fmtAxis: (v) => nf2.format(v),
     fmtTip: (v) => nf3.format(v),
-    tableLabel: 'שער דולר יציג לאורך זמן',
+    tableLabel: tr('שער דולר יציג לאורך זמן'),
   });
 }
 
@@ -1399,8 +1401,8 @@ const COLUMNS = [
 function renderTable() {
   $('itemsHead').innerHTML = COLUMNS.map((c) => {
     const sorted = ui.sort.key === c.key;
-    return `<th ${sorted ? `aria-sort="${ui.sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}><button type="button" data-sort="${c.key}">${c.label}${sorted ? (ui.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
-  }).join('') + '<th><span class="muted">פעולה</span></th>';
+    return `<th ${sorted ? `aria-sort="${ui.sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}><button type="button" data-sort="${c.key}">${tr(c.label)}${sorted ? (ui.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
+  }).join('') + `<th><span class="muted">${tr('פעולה')}</span></th>`;
 
   const q = $('search').value.trim().toLowerCase();
   const status = $('statusFilter').value, type = $('typeFilter').value;
@@ -1426,30 +1428,30 @@ function renderTable() {
   $('itemsBody').innerHTML = rows.map(rowHtml).join('');
   const empty = $('tableEmpty');
   empty.hidden = rows.length > 0;
-  empty.textContent = Object.keys(state.items).length ? 'אין מוצרים שמתאימים לסינון.' : 'עדיין אין מוצרים. בצע סנכרון מלא כדי לטעון את תיק Main.';
+  empty.textContent = Object.keys(state.items).length ? tr('אין מוצרים שמתאימים לסינון.') : tr('עדיין אין מוצרים. בצע סנכרון מלא כדי לטעון את תיק Main.');
 }
 const thumb = (url, w) => (/^https:\/\/public\.getcollectr\.com\//.test(url || '') ? url.replace('width=1200', `width=${w}`) : '');
 function conditionText(it) {
-  if (!it.isCard) return 'מארז סגור';
+  if (!it.isCard) return tr('מארז סגור');
   return [it.number, gradeText(it) || it.condition].filter(Boolean).join(' · ');
 }
 function rowHtml(r) {
   const { it, ps } = r;
   const none = '<span class="none">—</span>';
   const img = thumb(it.image, 120);
-  const partial = ps.length && r.boughtQty < it.qty ? `<span class="tag">הוזן ${r.boughtQty}/${it.qty}</span>` : '';
+  const partial = ps.length && r.boughtQty < it.qty ? `<span class="tag">${tr('הוזן {done}/{qty}', { done: r.boughtQty, qty: it.qty })}</span>` : '';
   return `<tr class="${it.removed ? 'removed' : ''}">
     <td><div class="product">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : '<span style="width:34px"></span>'}
-      <span><span class="product-name">${esc(it.name)}${it.isNew && !ps.length && !it.removed ? '<span class="tag new">חדש</span>' : ''}${it.removed ? '<span class="tag">הוסר מהתיק</span>' : ''}${partial}</span>
+      <span><span class="product-name">${esc(it.name)}${it.isNew && !ps.length && !it.removed ? `<span class="tag new">${tr('חדש')}</span>` : ''}${it.removed ? `<span class="tag">${tr('הוסר מהתיק')}</span>` : ''}${partial}</span>
       <span class="product-meta">${esc(it.set)}${conditionText(it) ? ` · ${esc(conditionText(it))}` : ''}</span></span></div></td>
     <td>${it.qty}</td>
     <td>${usd(it.price)}</td>
-    <td>${compsStatusHtml(it) || (it.diffPct ? delta(pct(it.diffPct), it.diffPct) : '<span class="muted">ללא שינוי</span>')}</td>
+    <td>${compsStatusHtml(it) || (it.diffPct ? delta(pct(it.diffPct), it.diffPct) : `<span class="muted">${tr('ללא שינוי')}</span>`)}</td>
     <td>${currentRate() ? ils(r.valueIls) : none}</td>
     <td>${ps.length ? ils(r.costIls) : none}</td>
     <td>${r.avgRate ? rateFmt(r.avgRate) : none}</td>
     <td>${ps.length ? `${delta(signedIls(r.pnlIls), r.pnlIls)} ${r.pnlPct !== null ? `<span class="muted">${pct(r.pnlPct)}</span>` : ''}` : none}</td>
-    <td><button class="btn small" type="button" data-purchase="${esc(it.key)}">${ps.length ? 'רכישות' : 'הזנת קנייה'}</button>${gradeOf(it) && !it.removed && !compsUi.hasKey ? ` <button class="btn small" type="button" data-ebay-open="${esc(it.key)}">eBay</button>` : ''}</td>
+    <td><button class="btn small" type="button" data-purchase="${esc(it.key)}">${ps.length ? tr('רכישות') : tr('הזנת קנייה')}</button>${gradeOf(it) && !it.removed && !compsUi.hasKey ? ` <button class="btn small" type="button" data-ebay-open="${esc(it.key)}">eBay</button>` : ''}</td>
   </tr>`;
 }
 
@@ -1462,36 +1464,36 @@ function openPurchase(key, editId = null) {
   const img = thumb(it.image, 200);
   const ps = itemPurchases(key).sort((a, b) => (a.date < b.date ? 1 : -1));
   const today = todayStr();
-  const history = ps.length ? `<div class="history"><h4>רכישות שהוזנו</h4>${ps.map((p) => {
+  const history = ps.length ? `<div class="history"><h4>${tr('רכישות שהוזנו')}</h4>${ps.map((p) => {
     const paid = p.currency === 'USD' ? usd(p.amount) : ils(p.amount, 2);
-    return `<div class="history-row${editing?.id === p.id ? ' editing' : ''}"><span>${fmtDate(p.date)} · ${p.qty} יח׳ · ${paid} · שער ${rateFmt(p.rate)}${p.note ? ` · ${esc(p.note)}` : ''}</span><span class="history-actions"><button class="btn small" type="button" data-edit="${esc(p.id)}">עדכון</button><button class="btn small ghost" type="button" data-del="${esc(p.id)}">מחיקה</button></span></div>`;
+    return `<div class="history-row${editing?.id === p.id ? ' editing' : ''}"><span>${fmtDate(p.date)} · ${tr('{qty} יח׳ · {paid} · שער {rate}', { qty: p.qty, paid, rate: rateFmt(p.rate) })}${p.note ? ` · ${esc(p.note)}` : ''}</span><span class="history-actions"><button class="btn small" type="button" data-edit="${esc(p.id)}">${tr('עדכון')}</button><button class="btn small ghost" type="button" data-del="${esc(p.id)}">${tr('מחיקה')}</button></span></div>`;
   }).join('')}</div>` : '';
   dlg.innerHTML = `
     <div class="dialog-head">${img ? `<img src="${esc(img)}" alt="">` : ''}
       <div><h3>${esc(it.name)}</h3><p class="muted">${esc(it.set)}${conditionText(it) ? ` · ${esc(conditionText(it))}` : ''}</p>
-      <p class="muted">מחיר נוכחי ${usd(it.price)} · בתיק ${it.qty} יח׳</p></div></div>
+      <p class="muted">${tr('מחיר נוכחי {price} · בתיק {qty} יח׳', { price: usd(it.price), qty: it.qty })}</p></div></div>
     ${history}
     <form id="purchaseForm" novalidate data-edit-id="${esc(editing?.id || '')}">
-      ${editing ? '<h4 class="form-title">עדכון רכישה</h4>' : ''}
+      ${editing ? `<h4 class="form-title">${tr('עדכון רכישה')}</h4>` : ''}
       <div class="form-grid">
-        <label class="field">תאריך קנייה<input type="date" name="date" max="${today}" value="${esc(editing?.date || today)}" required></label>
-        <label class="field">כמות שנקנתה<input type="number" name="qty" min="1" step="1" value="${editing ? editing.qty : Math.max(1, it.qty - ps.reduce((s, p) => s + p.qty, 0))}" required></label>
-        <label class="field">סכום ששולם, סה״כ<input type="number" name="amount" min="0" step="0.01" inputmode="decimal" dir="ltr" value="${editing ? editing.amount : ''}" required></label>
-        <div class="field">מטבע
-          <div class="segmented" role="radiogroup" aria-label="מטבע">
-            <label><input type="radio" name="currency" value="ILS" ${editing?.currency === 'USD' ? '' : 'checked'}><span>₪ שקל</span></label>
-            <label><input type="radio" name="currency" value="USD" ${editing?.currency === 'USD' ? 'checked' : ''}><span>$ דולר</span></label>
+        <label class="field">${tr('תאריך קנייה')}<input type="date" name="date" max="${today}" value="${esc(editing?.date || today)}" required></label>
+        <label class="field">${tr('כמות שנקנתה')}<input type="number" name="qty" min="1" step="1" value="${editing ? editing.qty : Math.max(1, it.qty - ps.reduce((s, p) => s + p.qty, 0))}" required></label>
+        <label class="field">${tr('סכום ששולם, סה״כ')}<input type="number" name="amount" min="0" step="0.01" inputmode="decimal" dir="ltr" value="${editing ? editing.amount : ''}" required></label>
+        <div class="field">${tr('מטבע')}
+          <div class="segmented" role="radiogroup" aria-label="${tr('מטבע')}">
+            <label><input type="radio" name="currency" value="ILS" ${editing?.currency === 'USD' ? '' : 'checked'}><span>${tr('₪ שקל')}</span></label>
+            <label><input type="radio" name="currency" value="USD" ${editing?.currency === 'USD' ? 'checked' : ''}><span>${tr('$ דולר')}</span></label>
           </div>
         </div>
-        <label class="field span2">הערה (לא חובה)<input type="text" name="note" maxlength="120" value="${esc(editing?.note || '')}"></label>
+        <label class="field span2">${tr('הערה (לא חובה)')}<input type="text" name="note" maxlength="120" value="${esc(editing?.note || '')}"></label>
       </div>
       <div id="purchasePreview" class="preview"></div>
       <p id="purchaseWarn" class="warn-line" hidden></p>
       <p id="purchaseError" class="error" hidden></p>
       <div class="dialog-actions">
-        <button class="btn primary" type="submit">${editing ? 'שמירת העדכון' : 'שמירה'}</button>
-        ${editing ? '<button class="btn" type="button" data-cancel-edit>ביטול העדכון</button>' : ''}
-        <button class="btn" type="button" data-close>${ps.length ? 'סגירה' : 'ביטול'}</button>
+        <button class="btn primary" type="submit">${editing ? tr('שמירת העדכון') : tr('שמירה')}</button>
+        ${editing ? `<button class="btn" type="button" data-cancel-edit>${tr('ביטול העדכון')}</button>` : ''}
+        <button class="btn" type="button" data-close>${ps.length ? tr('סגירה') : tr('ביטול')}</button>
       </div>
     </form>`;
   const form = dlg.querySelector('#purchaseForm');
@@ -1502,11 +1504,11 @@ function openPurchase(key, editId = null) {
   dlg.querySelector('[data-cancel-edit]')?.addEventListener('click', () => openPurchase(key));
   dlg.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openPurchase(key, b.dataset.edit)));
   dlg.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm('למחוק את הרכישה הזו?')) return;
+    if (!confirm(tr('למחוק את הרכישה הזו?'))) return;
     try {
       await mutate(() => { state.purchases = state.purchases.filter((p) => p.id !== b.dataset.del); });
     } catch (e) {
-      toast(`המחיקה נכשלה: ${e.message}`);
+      toast(tr('המחיקה נכשלה: {msg}', { msg: e.message }));
       return;
     }
     render();
@@ -1530,47 +1532,47 @@ function updatePurchasePreview(form, it) {
   const box = form.querySelector('#purchasePreview');
   const r = v.date ? rateOn(v.date) : null;
   const now = currentRate();
-  if (!r || !now) { box.innerHTML = '<div class="hint">אין שער זמין לתאריך הזה.</div>'; return; }
-  const hint = r.date !== v.date ? `<div class="hint">אין פרסום בתאריך הזה, נלקח השער האחרון שפורסם לפניו (${plainDate(r.date)}).</div>` : '';
-  let body = `<div class="row"><span>שער יציג ביום הקנייה</span><b>${rateFmt(r.rate)}</b></div>${hint}`;
+  if (!r || !now) { box.innerHTML = `<div class="hint">${tr('אין שער זמין לתאריך הזה.')}</div>`; return; }
+  const hint = r.date !== v.date ? `<div class="hint">${tr('אין פרסום בתאריך הזה, נלקח השער האחרון שפורסם לפניו ({date}).', { date: plainDate(r.date) })}</div>` : '';
+  let body = `<div class="row"><span>${tr('שער יציג ביום הקנייה')}</span><b>${rateFmt(r.rate)}</b></div>${hint}`;
   if (v.amount > 0 && v.qty >= 1) {
     const c = purchaseCalc({ key: it.key, qty: v.qty, amount: v.amount, currency: v.currency, rate: r.rate }, now.rate);
-    body += `<div class="row"><span>${v.currency === 'USD' ? 'בשקלים' : 'בדולרים'} לפי שער יום הקנייה</span><b>${v.currency === 'USD' ? ils(c.costIls) : usd(c.costUsd)}</b></div>
-      <div class="row"><span>שווי היום (שער ${rateFmt(now.rate)})</span><b>${ils(c.valueIls)}</b></div>
-      <div class="row"><span>רווח או הפסד</span><b>${delta(signedIls(c.pnlIls), c.pnlIls)}</b></div>`;
+    body += `<div class="row"><span>${v.currency === 'USD' ? tr('בשקלים לפי שער יום הקנייה') : tr('בדולרים לפי שער יום הקנייה')}</span><b>${v.currency === 'USD' ? ils(c.costIls) : usd(c.costUsd)}</b></div>
+      <div class="row"><span>${tr('שווי היום (שער {rate})', { rate: rateFmt(now.rate) })}</span><b>${ils(c.valueIls)}</b></div>
+      <div class="row"><span>${tr('רווח או הפסד')}</span><b>${delta(signedIls(c.pnlIls), c.pnlIls)}</b></div>`;
   }
   box.innerHTML = body;
   const warn = form.querySelector('#purchaseWarn');
   const total = itemPurchases(it.key).filter((p) => p.id !== form.dataset.editId).reduce((s, p) => s + p.qty, 0) + (v.qty || 0);
   warn.hidden = !(v.amount > 0) || total <= it.qty;
-  warn.textContent = `סה״כ הרכישות (${total}) גדול מהכמות בתיק (${it.qty}).`;
+  warn.textContent = tr('סה״כ הרכישות ({total}) גדול מהכמות בתיק ({qty}).', { total, qty: it.qty });
 }
 async function submitPurchase(form, it) {
   const v = readPurchaseForm(form);
   const err = form.querySelector('#purchaseError');
   const fail = (m) => { err.textContent = m; err.hidden = false; };
-  if (!v.date || v.date > todayStr()) return fail('יש לבחור תאריך קנייה שאינו בעתיד.');
-  if (!(v.amount > 0)) return fail('יש להזין סכום גדול מאפס.');
-  if (!Number.isInteger(v.qty) || v.qty < 1) return fail('הכמות צריכה להיות מספר שלם, 1 ומעלה.');
+  if (!v.date || v.date > todayStr()) return fail(tr('יש לבחור תאריך קנייה שאינו בעתיד.'));
+  if (!(v.amount > 0)) return fail(tr('יש להזין סכום גדול מאפס.'));
+  if (!Number.isInteger(v.qty) || v.qty < 1) return fail(tr('הכמות צריכה להיות מספר שלם, 1 ומעלה.'));
   const r = rateOn(v.date);
-  if (!r) return fail('אין שער זמין לתאריך הזה. בדוק את החיבור לבנק ישראל ונסה שוב.');
+  if (!r) return fail(tr('אין שער זמין לתאריך הזה. בדוק את החיבור לבנק ישראל ונסה שוב.'));
   const editId = form.dataset.editId;
   if (editId) {
     try {
       await mutate(() => {
         const p = state.purchases.find((x) => x.id === editId);
-        if (!p) throw new Error('הרכישה כבר לא קיימת');
+        if (!p) throw new Error(tr('הרכישה כבר לא קיימת'));
         Object.assign(p, {
           date: v.date, qty: v.qty, amount: v.amount, currency: v.currency, note: v.note,
           rate: r.rate, rateDate: r.date, updatedAt: new Date().toISOString(),
         });
       });
     } catch (e) {
-      return fail(`העדכון נכשל: ${e.message}`);
+      return fail(tr('העדכון נכשל: {msg}', { msg: e.message }));
     }
     $('purchaseDialog').close();
     render();
-    toast(`הרכישה עודכנה: ${it.name}`);
+    toast(tr('הרכישה עודכנה: {name}', { name: it.name }));
     return;
   }
   const purchase = {
@@ -1584,11 +1586,11 @@ async function submitPurchase(form, it) {
       if (state.items[it.key]) state.items[it.key].isNew = false;
     });
   } catch (e) {
-    return fail(`השמירה נכשלה: ${e.message}`);
+    return fail(tr('השמירה נכשלה: {msg}', { msg: e.message }));
   }
   $('purchaseDialog').close();
   render();
-  toast(`נשמר: ${it.name}`);
+  toast(tr('נשמר: {name}', { name: it.name }));
 }
 
 /* ---------- sync dialog ---------- */
@@ -1599,44 +1601,44 @@ function bookmarkletCode() {
   const code = `(async()=>{
 const S='${server}';
 const m=location.href.match(/^https:\\/\\/app\\.getcollectr\\.com\\/showcase\\/profile\\/@([A-Za-z0-9_.-]+)/);
-if(!m){alert('יש ללחוץ על הסימניה בדף של פרופיל ב-Collectr (showcase/profile).');return}
+if(!m){alert(${jsq('יש ללחוץ על הסימניה בדף של פרופיל ב-Collectr (showcase/profile).')});return}
 const H=m[1];
 const w=window.open(S+'/','portfolio-tracker');
-if(!w){alert('הדפדפן חסם את פתיחת האפליקציה. יש לאשר חלונות קופצים מהאתר הזה ולנסות שוב.');return}
+if(!w){alert(${jsq('הדפדפן חסם את פתיחת האפליקציה. יש לאשר חלונות קופצים מהאתר הזה ולנסות שוב.')});return}
 const b=document.createElement('div');
-b.style='position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;background:#111;color:#fff;padding:10px 18px;border-radius:10px;font:15px system-ui;direction:rtl';
-b.textContent='מסנכרן…';document.body.append(b);
+b.style='position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;background:#111;color:#fff;padding:10px 18px;border-radius:10px;font:15px system-ui;direction:${langDir()}';
+b.textContent=${jsq('מסנכרן…')};document.body.append(b);
 try{
-const A=async(o,id)=>{const r=await fetch('https://api-v2.getcollectr.com/data/showcase/@'+H+'?offset='+o+'&limit=30'+(id?'&id='+id:'')+'&filters=&unstackedView=true&username=00000000-0000-0000-0000-000000000000',{credentials:'include'});if(!r.ok)throw Error('Collectr החזיר '+r.status+'. רענן את הדף ונסה שוב.');return r.json()};
+const A=async(o,id)=>{const r=await fetch('https://api-v2.getcollectr.com/data/showcase/@'+H+'?offset='+o+'&limit=30'+(id?'&id='+id:'')+'&filters=&unstackedView=true&username=00000000-0000-0000-0000-000000000000',{credentials:'include'});if(!r.ok)throw Error(${jsq('Collectr החזיר {s}. רענן את הדף ונסה שוב.')}.replace('{s}',r.status));return r.json()};
 const C=((await A(0,'')).collections)||[];
-if(!C.length)throw Error('לא נמצאו תיקים בפרופיל');
+if(!C.length)throw Error(${jsq('לא נמצאו תיקים בפרופיל')});
 const R=[];
 for(const c of C){let P=[],F=null;
-for(let o=0;o<6000;o+=30){const j=await A(o,c.id);F=F||j;if(!(j.products||[]).length)break;P.push(...j.products);b.textContent='מסנכרן את '+c.name+'… '+P.length;await new Promise(s=>setTimeout(s,300))}
+for(let o=0;o<6000;o+=30){const j=await A(o,c.id);F=F||j;if(!(j.products||[]).length)break;P.push(...j.products);b.textContent=${jsq('מסנכרן את {name}… {n}')}.replace('{name}',()=>c.name).replace('{n}',P.length);await new Promise(s=>setTimeout(s,300))}
 R.push({collection:{id:c.id,name:c.name},portfolioValue:F&&F.portfolio_value&&F.portfolio_value[0]&&F.portfolio_value[0].price,totals:F?{cards:F.total_cards,sealed:F.total_sealed,graded:F.total_graded}:null,products:P})}
 const D={version:2,fetchedAt:new Date().toISOString(),handle:H,results:R};
-await new Promise((ok,no)=>{let i,t;const h=e=>{if(e.origin===S&&e.data&&e.data.type==='collectr-sync-ack'&&e.data.fetchedAt===D.fetchedAt){done();ok()}};const done=()=>{clearInterval(i);clearTimeout(t);removeEventListener('message',h)};addEventListener('message',h);i=setInterval(()=>w.postMessage({type:'collectr-sync',payload:D},S),700);t=setTimeout(()=>{done();no(Error('האפליקציה לא ענתה. האם היא פועלת?'))},20000)});
-b.textContent='✓ נשלחו '+R.length+' תיקים לאפליקציה.';setTimeout(()=>b.remove(),5000)
-}catch(e){b.style.background='#b92f2f';b.textContent='הסנכרון נכשל: '+e.message;setTimeout(()=>b.remove(),9000)}
+await new Promise((ok,no)=>{let i,t;const h=e=>{if(e.origin===S&&e.data&&e.data.type==='collectr-sync-ack'&&e.data.fetchedAt===D.fetchedAt){done();ok()}};const done=()=>{clearInterval(i);clearTimeout(t);removeEventListener('message',h)};addEventListener('message',h);i=setInterval(()=>w.postMessage({type:'collectr-sync',payload:D},S),700);t=setTimeout(()=>{done();no(Error(${jsq('האפליקציה לא ענתה. האם היא פועלת?')}))},20000)});
+b.textContent=${jsq('✓ נשלחו {n} תיקים לאפליקציה.')}.replace('{n}',R.length);setTimeout(()=>b.remove(),5000)
+}catch(e){b.style.background='#b92f2f';b.textContent=${jsq('הסנכרון נכשל: {m}')}.replace('{m}',()=>e.message);setTimeout(()=>b.remove(),9000)}
 })()`;
   return `javascript:${encodeURIComponent(code.replace(/\n/g, ''))}`;
 }
 function openSyncDialog() {
   const dlg = $('syncDialog');
   dlg.innerHTML = `
-    <h3 style="font-size:17px;font-weight:650">סנכרון מלא מ-Collectr</h3>
-    <p class="muted" style="margin-top:4px">השרת של Collectr חוסם בקשות שלא מגיעות מדפדפן, ולכן הסנכרון רץ מהדפדפן שלך, בדף של Collectr עצמו. הסימניה קוראת את כל התיקים בפרופיל, והאפליקציה שומרת רק את התיקים שהוספת.</p>
+    <h3 style="font-size:17px;font-weight:650">${tr('סנכרון מלא מ-Collectr')}</h3>
+    <p class="muted" style="margin-top:4px">${tr('השרת של Collectr חוסם בקשות שלא מגיעות מדפדפן, ולכן הסנכרון רץ מהדפדפן שלך, בדף של Collectr עצמו. הסימניה קוראת את כל התיקים בפרופיל, והאפליקציה שומרת רק את התיקים שהוספת.')}</p>
     <ol class="steps">
-      <li><b>פעם אחת בלבד:</b> גרור את הכפתור הזה לסרגל הסימניות (Ctrl+Shift+B מציג אותו). אם יש לך כבר סימניית סנכרון ישנה, החלף אותה בזו: הישנה מסנכרנת רק את Main.<br>
-        <a class="bookmarklet" id="bookmarkletLink" href="#" draggable="true">סנכרון Collectr</a></li>
-      <li>פתח את הפרופיל של התיק <b>${esc(current.name)}</b> ב-Collectr והמתן לטעינה.<br>
-        <a class="btn small" style="display:inline-block;margin-top:4px;text-decoration:none" href="${esc(profileUrl(current))}" target="_blank" rel="noopener noreferrer">פתיחת הדף</a></li>
-      <li>לחץ על הסימניה. האפליקציה תיפתח בחלון משלה ותתעדכן מעצמה. אם הדפדפן חוסם חלון קופץ, יש לאשר אותו.</li>
+      <li>${tr('<b>פעם אחת בלבד:</b> גרור את הכפתור הזה לסרגל הסימניות (Ctrl+Shift+B מציג אותו). אם יש לך כבר סימניית סנכרון ישנה, החלף אותה בזו: הישנה מסנכרנת רק את Main.')}<br>
+        <a class="bookmarklet" id="bookmarkletLink" href="#" draggable="true">${tr('סנכרון Collectr')}</a></li>
+      <li>${tr('פתח את הפרופיל של התיק <b>{name}</b> ב-Collectr והמתן לטעינה.', { name: esc(current.name) })}<br>
+        <a class="btn small" style="display:inline-block;margin-top:4px;text-decoration:none" href="${esc(profileUrl(current))}" target="_blank" rel="noopener noreferrer">${tr('פתיחת הדף')}</a></li>
+      <li>${tr('לחץ על הסימניה. האפליקציה תיפתח בחלון משלה ותתעדכן מעצמה. אם הדפדפן חוסם חלון קופץ, יש לאשר אותו.')}</li>
     </ol>
-    <div class="dialog-actions"><button class="btn" type="button" data-close>סגירה</button></div>`;
+    <div class="dialog-actions"><button class="btn" type="button" data-close>${tr('סגירה')}</button></div>`;
   const link = dlg.querySelector('#bookmarkletLink');
   link.setAttribute('href', bookmarkletCode());
-  link.addEventListener('click', (e) => { e.preventDefault(); toast('יש לגרור את הכפתור לסרגל הסימניות'); });
+  link.addEventListener('click', (e) => { e.preventDefault(); toast(tr('יש לגרור את הכפתור לסרגל הסימניות')); });
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
   dlg.showModal();
 }
@@ -1657,7 +1659,7 @@ addEventListener('message', async (e) => {
     await checkForSync();
   } catch (err) {
     receivedSyncs.delete(payload.fetchedAt);
-    toast(`שמירת הסנכרון נכשלה: ${err.message}`);
+    toast(tr('שמירת הסנכרון נכשלה: {msg}', { msg: err.message }));
   }
 });
 document.addEventListener('click', (e) => {
@@ -1696,7 +1698,7 @@ $('typeFilter').addEventListener('change', renderTable);
 $('syncBtn').addEventListener('click', openSyncDialog);
 $('compsBtn').addEventListener('click', openCompsDialog);
 $('portfoliosBtn').addEventListener('click', () => openPortfoliosDialog());
-$('portfolioSelect').addEventListener('change', (e) => { switchPortfolio(e.target.value).catch((err) => toast(`המעבר נכשל: ${err.message}`)); });
+$('portfolioSelect').addEventListener('change', (e) => { switchPortfolio(e.target.value).catch((err) => toast(tr('המעבר נכשל: {msg}', { msg: err.message }))); });
 $('refreshBtn').addEventListener('click', () => refreshAll(true));
 const receivedEbay = new Set();
 addEventListener('message', (e) => {
@@ -1718,6 +1720,7 @@ addEventListener('resize', () => {
 });
 
 /* ---------- startup ---------- */
+i18nOnChange = () => { renderPortfolioPicker(); render(); };
 async function refreshAll(announce) {
   const btn = $('refreshBtn');
   btn.disabled = true;
@@ -1731,7 +1734,7 @@ async function refreshAll(announce) {
     } catch (e) { ui.quickError = e.message; }
     render();
     if (announce && !ui.quickError && !ui.fxError) {
-      toast(res?.added ? `נמצאו ${res.added} מוצרים חדשים` : 'הנתונים עודכנו');
+      toast(res?.added ? tr('נמצאו {n} מוצרים חדשים', { n: res.added }) : tr('הנתונים עודכנו'));
     }
   } finally {
     btn.disabled = false;
@@ -1755,4 +1758,4 @@ async function refreshAll(announce) {
     render();
     checkForSync();
   });
-})().catch((e) => toast(`שגיאה בטעינה: ${e.message}`));
+})().catch((e) => toast(tr('שגיאה בטעינה: {msg}', { msg: e.message })));
