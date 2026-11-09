@@ -1,0 +1,4 @@
+# Personal data and API keys - stays on this computer only
+data/
+
+*.log

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>מעקב תיק קלפים</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='7' y='3' width='18' height='26' rx='3' fill='%232a78d6'/%3E%3Cpath d='M11 21l4-5 3 3 3-6' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-title">
+      <div class="title-row">
+        <h1>מעקב תיק קלפים</h1>
+        <select id="portfolioSelect" aria-label="בחירת תיק"></select>
+        <button id="portfoliosBtn" class="btn small" type="button">ניהול תיקים</button>
+      </div>
+      <p id="freshness" class="muted"></p>
+    </div>
+    <div class="topbar-actions">
+      <button id="compsBtn" class="btn" type="button">מחירי מדורגים</button>
+      <button id="refreshBtn" class="btn" type="button">רענון מהיר</button>
+      <button id="syncBtn" class="btn primary" type="button">סנכרון מלא</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <div id="banners"></div>
+    <section id="kpis" class="kpis" aria-label="נתונים עיקריים"></section>
+
+    <section class="charts">
+      <article class="card chart-card wide">
+        <div class="card-head">
+          <h2 id="valueTitle">עלות מול שווי</h2>
+          <div class="segmented" role="group" aria-label="תצוגת גרף שווי">
+            <button type="button" data-value-view="tracked" class="on">מוצרים שהוזנו</button>
+            <button type="button" data-value-view="all">כל התיק</button>
+          </div>
+        </div>
+        <div id="valueChart" class="chart"></div>
+      </article>
+      <article class="card chart-card">
+        <div class="card-head">
+          <h2>מה הזיז את הרווח</h2>
+          <div class="segmented" role="group" aria-label="אילו מוצרים להציג">
+            <button type="button" data-effect-view="all">כל המוצרים</button>
+            <button type="button" data-effect-view="tracked" class="on">פריטים שהוזנו</button>
+          </div>
+        </div>
+        <div id="effectChart" class="chart"></div>
+      </article>
+      <article class="card chart-card full">
+        <div class="card-head">
+          <h2>שער דולר יציג ורכישות</h2>
+          <div class="segmented" role="group" aria-label="טווח זמן">
+            <button type="button" data-fx-range="90">3 חודשים</button>
+            <button type="button" data-fx-range="365" class="on">שנה</button>
+            <button type="button" data-fx-range="1825">5 שנים</button>
+          </div>
+        </div>
+        <div id="fxChart" class="chart"></div>
+      </article>
+    </section>
+
+    <section class="card table-card">
+      <div class="table-head">
+        <h2 id="tableTitle">המוצרים בתיק</h2>
+        <div class="filters">
+          <input id="search" type="search" placeholder="חיפוש לפי שם או סט" aria-label="חיפוש מוצר">
+          <select id="statusFilter" aria-label="סינון לפי עלות">
+            <option value="all">כל המוצרים</option>
+            <option value="missing">ללא עלות</option>
+            <option value="entered">עם עלות</option>
+            <option value="new">חדשים</option>
+            <option value="removed">הוסרו מהתיק</option>
+          </select>
+          <select id="typeFilter" aria-label="סינון לפי סוג">
+            <option value="all">קלפים ומארזים</option>
+            <option value="card">קלפים</option>
+            <option value="sealed">מארזים סגורים</option>
+            <option value="graded">מדורגים</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="items">
+          <thead><tr id="itemsHead"></tr></thead>
+          <tbody id="itemsBody"></tbody>
+        </table>
+      </div>
+      <p id="tableEmpty" class="empty" hidden></p>
+    </section>
+  </main>
+
+  <dialog id="purchaseDialog" class="dialog"></dialog>
+  <dialog id="syncDialog" class="dialog"></dialog>
+  <dialog id="ebayDialog" class="dialog"></dialog>
+  <dialog id="compsDialog" class="dialog dialog-wide"></dialog>
+  <dialog id="portfoliosDialog" class="dialog dialog-wide"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="tooltip" class="tooltip" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
